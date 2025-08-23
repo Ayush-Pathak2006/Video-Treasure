@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+body {
+  background-color: #111827; /* A dark gray-blue */
+  color: #f9fafb;
+  overflow-x: hidden;
+  background-image: radial-gradient(circle at 25% 25%, rgba(67, 56, 202, 0.4), rgba(17, 24, 39, 0) 40%),
+radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.3), rgba(17, 24, 39, 0) 40%);
+  animation: moveGradient 15s ease-in-out infinite;
+}
+
+@keyframes moveGradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
