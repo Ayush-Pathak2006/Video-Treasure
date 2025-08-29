@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AppContext'; 
+import ppi from '../api/axios';
 
 function Register() {
   const navigate = useNavigate();
@@ -15,7 +16,7 @@ function Register() {
     const data = Object.fromEntries(formData.entries());
 
     try {
-      const response = await axios.post('http://localhost:8000/api/v1/users/register', data);
+      const response = await ppi.post('/api/v1/users/register', data);
       console.log('Registration successful:', response.data);
 
       await login(data.email, data.password);

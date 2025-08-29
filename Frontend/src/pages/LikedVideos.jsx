@@ -3,6 +3,7 @@ import axios from 'axios';
 import Header from '../components/Header';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AppContext';
+import ppi from '../api/axios';
 
 const LikedVideoCard = ({ video, onUnlike }) => {
   const { toggleLike } = useAuth();
@@ -39,7 +40,7 @@ function LikedVideos() {
   useEffect(() => {
     const fetchLikedVideos = async () => {
       try {
-        const response = await axios.get('http://localhost:8000/api/v1/likes/videos', { withCredentials: true });
+        const response = await ppi.get('/api/v1/likes/videos', { withCredentials: true });
         setVideos(response.data.data);
       } catch (error) {
         console.error("Failed to fetch liked videos:", error);

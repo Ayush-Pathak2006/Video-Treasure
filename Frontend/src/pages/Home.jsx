@@ -4,6 +4,7 @@ import axios from 'axios';
 import Header from '../components/Header'; 
 import { useAuth } from '../context/AppContext'; 
 import { useSearch } from '../context/AppContext';
+import ppi from '../api/axios';
 
 
 
@@ -58,7 +59,7 @@ const VideoCard = ({ video }) => {
         channelTitle: video.channelTitle,
       };
 
-      const response = await axios.post('http://localhost:8000/api/v1/likes/toggle', videoData, { withCredentials: true });
+      const response = await ppi.post('/api/v1/likes/toggle', videoData, { withCredentials: true });
 
       setIsLiked(prev => !prev);
     } catch (error) {
@@ -116,7 +117,7 @@ function Home() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`http://localhost:8000/api/v1/videos/search?q=${searchQuery}&pageToken=${token}`);
+      const response = await ppi.get(`/api/v1/videos/search?q=${searchQuery}&pageToken=${token}`);
       const { videos: newVideos, nextPageToken: newNextPageToken } = response.data.data;
       
 
