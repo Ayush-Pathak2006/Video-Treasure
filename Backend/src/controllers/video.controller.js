@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const searchVideos = async (req, res) => {
-    const { q: query, pageToken } = req.query; // q is the search query
+    const { q: query, pageToken } = req.query; 
 
     if (!query) {
         return res.status(400).json({ error: "Search query is required" });
@@ -11,8 +11,7 @@ const searchVideos = async (req, res) => {
     const API_KEY = process.env.YOUTUBE_API_KEY;
 
     try {
-        // --- THIS IS THE FIX ---
-        // Create a base params object
+
         const params = {
             key: API_KEY,
             part: 'snippet',
@@ -21,15 +20,15 @@ const searchVideos = async (req, res) => {
             maxResults: 12,
         };
 
-        // Only add pageToken to params if it has a value
+
         if (pageToken) {
             params.pageToken = pageToken;
         }
-        // -----------------------
+
 
         const response = await axios.get(YOUTUBE_SEARCH_API, { params });
 
-        // Format the raw YouTube API response into a cleaner structure
+        
         const videos = response.data.items.map(item => ({
             platformVideoId: item.id.videoId,
             title: item.snippet.title,

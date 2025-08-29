@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 
 function Player() {
-  const { id } = useParams(); // Gets the video ID from the URL (e.g., /watch/videoId)
+  const { id } = useParams(); 
   const youtubeUrl = `https://www.youtube.com/embed/${id}?autoplay=1`;
 
   return (

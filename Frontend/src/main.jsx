@@ -5,11 +5,14 @@ import './index.css'
 import App from './App.jsx'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { AppProvider } from './context/AppContext.jsx'
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById('root')).render(
+ <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <AppProvider> 
+        <App />
+      </AppProvider>
     </BrowserRouter>
-  </StrictMode>,
+  </React.StrictMode>,
 )
