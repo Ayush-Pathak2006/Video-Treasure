@@ -1,8 +1,7 @@
 
-FROM node:22
-
+FROM node:18
 # Set the working directory inside the container
-WORKDIR /src/index
+WORKDIR /usr/src/app
 
 # Copy package.json and package-lock.json to the container
 COPY package*.json ./
