@@ -4,7 +4,7 @@ import cookieParser from "cookie-parser";
 const app = express();
 
 app.use(cors({
-    origin: video-treasure.vercel.app,
+    origin: process.env.CORS_ORIGIN,
     credentials: true,
     optionsSuccessStatus: 200
 }));
