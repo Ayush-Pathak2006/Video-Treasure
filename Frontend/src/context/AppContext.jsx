@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import ppi from '../api/axios';
 
 const AuthContext = createContext();
 const SearchContext = createContext();
+
 
 export const AppProvider = ({ children }) => {
     // --- Authentication State ---
@@ -17,7 +19,7 @@ export const AppProvider = ({ children }) => {
 
     const fetchLikedIds = async () => {
         try {
-            const response = await axios.get('http://localhost:8000/api/v1/likes/ids', { withCredentials: true });
+            const response = await ppi.get('/api/v1/likes/ids', { withCredentials: true });
             setLikedVideoIds(new Set(response.data.data.likedVideoIds));
         } catch (error) {
             console.error("Could not fetch liked video IDs", error);
@@ -25,7 +27,7 @@ export const AppProvider = ({ children }) => {
     };
 
     const login = async (email, password) => {
-        const response = await axios.post('http://localhost:8000/api/v1/users/login', { email, password }, { withCredentials: true });
+        const response = await ppi.post('/api/v1/users/login', { email, password }, { withCredentials: true });
         if (response.data) {
             setUser(response.data.data.user);
             await fetchLikedIds();
@@ -34,7 +36,7 @@ export const AppProvider = ({ children }) => {
     };
 
     const logout = async () => {
-        await axios.post('http://localhost:8000/api/v1/users/logout', {}, { withCredentials: true });
+        await ppi.post('/api/v1/users/logout', {}, { withCredentials: true });
         setUser(null);
         setLikedVideoIds(new Set());
     };
@@ -51,7 +53,7 @@ export const AppProvider = ({ children }) => {
         setLikedVideoIds(newLikedIds);
         try {
             const videoData = { /* video details */ };
-            await axios.post('http://localhost:8000/api/v1/likes/toggle', video, { withCredentials: true });
+            await ppi.post('/api/v1/likes/toggle', video, { withCredentials: true });
         } catch (error) {
             setLikedVideoIds(new Set(likedVideoIds));
         }
@@ -60,7 +62,7 @@ export const AppProvider = ({ children }) => {
     useEffect(() => {
         const checkUserSession = async () => {
             try {
-                const response = await axios.post('http://localhost:8000/api/v1/users/refresh-token', {}, { withCredentials: true });
+                const response = await ppi.post('/api/v1/users/refresh-token', {}, { withCredentials: true });
                 setUser(response.data.data.user);
                 await fetchLikedIds();
             } catch (error) {
