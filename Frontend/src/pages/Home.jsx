@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import React, { useState, useRef, useCallback } from 'react';
-import axios from 'axios';
 import Header from '../components/Header'; 
 import { useAuth } from '../context/AppContext'; 
 import { useSearch } from '../context/AppContext';
@@ -104,8 +103,8 @@ const Loader = () => (
 
 function Home() {
     
-     const { loading: authLoading } = useAuth();
-   const { query, setQuery, videos, setVideos, nextPageToken, setNextPageToken } = useSearch();
+  const { loading: authLoading } = useAuth();
+  const { query, setQuery, videos, setVideos, nextPageToken, setNextPageToken } = useSearch();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -173,7 +172,8 @@ function Home() {
          <Header />
 
         <main>
-            <SearchBar onSearch={handleSearch} loading={loading} />
+        
+        <SearchBar onSearch={handleSearch} loading={loading} />
          
         {loading && <Loader />}
         

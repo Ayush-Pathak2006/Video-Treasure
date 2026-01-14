@@ -1,6 +1,11 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+// Routes import
+import videoRouter from './routes/video.routes.js';
+import userRouter from './routes/user.routes.js';
+import likeRouter from './routes/like.routes.js'; 
+
 const app = express();
 
 app.use(cors({
@@ -18,10 +23,7 @@ app.use("/api/v1/test", (req, res) => {
     res.status(200).json({ message: "Test route is working!" });
 });
 
-// Routes import
-import videoRouter from './routes/video.routes.js';
-import userRouter from './routes/user.routes.js';
-import likeRouter from './routes/like.routes.js'; 
+
 // Routes declaration
 app.use("/api/v1/videos", videoRouter);
 app.use("/api/v1/users", userRouter);   
