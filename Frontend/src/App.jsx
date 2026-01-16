@@ -6,6 +6,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LikedVideos from "./pages/LikedVideos";
+import VerifyEmail from "./pages/VerifyEmail";
+
 
 function App() {
   return (
@@ -14,6 +16,7 @@ function App() {
       <Route path="/watch/:id" element={<Player />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route element={<ProtectedRoute />}>
       <Route path="/liked-videos" element={<LikedVideos />} />
       </Route>

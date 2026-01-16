@@ -4,61 +4,74 @@ import { User } from "../models/user.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import { generateAccessAndRefreshTokens } from "../models/user.model.js";
+import crypto from "crypto";
+import { sendVerificationEmail } from "../utils/sendVerificationEmail.js";
+
+
+//verification email function (temporary)
+// const sendVerificationEmail = async (email, verificationUrl) => {
+//     // TEMP: Replace later with Brevo
+//     console.log("📧 Verification email sent to:", email);
+//     console.log("🔗 Verification link:", verificationUrl);
+// }  we are importing this fiunction
+
+
 
 const registerUser = asyncHandler(async (req, res) => {
     const { fullName, email, username, password } = req.body;
 
+    // 1️⃣ Validate input
     if ([fullName, email, username, password].some((field) => field?.trim() === "")) {
         throw new ApiError(400, "All fields are required");
     }
 
+    // 2️⃣ Check if user already exists
     const existedUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existedUser) {
         throw new ApiError(409, "User with email or username already exists");
     }
 
+    // 3️⃣ Create user (NOT verified yet)
     const user = await User.create({
         fullName,
         email,
         username: username.toLowerCase(),
-        password
+        password,
+        authProvider: "local",
+        isEmailVerified: false
     });
 
-    const createdUser = await User.findById(user._id).select("-password -refreshToken");
+    // 4️⃣ Generate email verification token (RAW)
+    const verificationToken = crypto.randomBytes(32).toString("hex");
 
-    if (!createdUser) {
-        throw new ApiError(500, "Something went wrong while registering the user");
-    }
+    // 5️⃣ Hash the token before saving
+    const hashedToken = crypto
+        .createHash("sha256")
+        .update(verificationToken)
+        .digest("hex");
 
-    const accessToken = createdUser.generateAccessToken();
-    const refreshToken = createdUser.generateRefreshToken();
+    // 6️⃣ Save hashed token + expiry
+    user.emailVerificationToken = hashedToken;
+    user.emailVerificationExpiry = Date.now() + 15 * 60 * 1000; // 15 minutes
 
-  
-    createdUser.refreshToken = refreshToken;
-    await createdUser.save({ validateBeforeSave: false });
+    await user.save({ validateBeforeSave: false });
 
-    const options = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: "lax"
-    };
+    // 7️⃣ Build verification URL (frontend route)
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-    return res
-        .status(201) 
-        .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", refreshToken, options)
-        .json(
-            new ApiResponse(
-                201,
-                {
-                    user: createdUser,
-                    accessToken,
-                    refreshToken
-                },
-                "User registered and logged in successfully"
-            )
-        );
+    // 8️⃣ Send verification email (placeholder)
+    await sendVerificationEmail(user.email, verificationUrl);
+
+    // 9️⃣ Respond (NO login here)
+    return res.status(201).json(
+        new ApiResponse(
+            201,
+            {},
+            "User registered successfully. Please verify your email to activate your account."
+        )
+    );
 });
+
 
 const loginUser = asyncHandler(async (req, res) => {
 
@@ -198,5 +211,56 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 });
 
+//verification of email controller
+const verifyEmail = asyncHandler(async (req, res) => {
+    const { token } = req.query;
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken };
+    // 1️⃣ Token must exist
+    if (!token) {
+        throw new ApiError(400, "Verification token is missing");
+    }
+
+    // 2️⃣ Hash incoming token (same way we hashed before saving)
+    const hashedToken = crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
+
+    // 3️⃣ Find user with valid token & unexpired
+    const user = await User.findOne({
+        emailVerificationToken: hashedToken,
+        emailVerificationExpiry: { $gt: Date.now() }
+    });
+
+    if (!user) {
+        throw new ApiError(400, "Invalid or expired verification token");
+    }
+
+    // 4️⃣ Mark email as verified
+    user.isEmailVerified = true;
+
+    // 5️⃣ Cleanup verification fields
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpiry = undefined;
+
+    await user.save({ validateBeforeSave: false });
+
+    // 6️⃣ Respond (NO auto-login)
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {},
+            "Email verified successfully. You can now log in."
+        )
+    );
+});
+
+
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser,
+    refreshAccessToken,
+    verifyEmail
+};
