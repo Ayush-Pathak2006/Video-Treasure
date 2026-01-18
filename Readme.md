@@ -92,12 +92,12 @@ The platform acts as a unified aggregation layer that:
 ### V2
 - User watch history
 - Bookmarks and saved searches
-- Add Lije and Dislike count
+- Add Like and Dislike count
 
 ### V3
-- AI-powered video summaries
-- Voice-to-text notes
-- Personalized recommendations
+- Create an algorithm for recommended system
+- Admin Dashboard (if necessary)
+- Report and remove videos from recommendation
 
 ---
 
