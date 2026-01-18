@@ -19,7 +19,7 @@ const userSchema = new Schema(
       lowercase: true,
       trim: true,
     },
-// oAuth 2 schema additions
+    // oAuth 2 schema additions
     authProvider: {
       type: String,
       enum: ["local", "google", "github"],
@@ -55,6 +55,13 @@ const userSchema = new Schema(
     },
     refreshToken: {
       type: String,
+    },
+
+    passwordResetToken: {
+      type: String,
+    },
+    passwordResetExpiry: {
+      type: Date,
     },
   },
   {

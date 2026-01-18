@@ -28,16 +28,23 @@ export const AppProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const response = await ppi.post(
-      "/api/v1/users/login",
-      { email, password },
-      { withCredentials: true }
-    );
-    if (response.data) {
-      setUser(response.data.data.user);
-      await fetchLikedIds();
+    try {
+      const response = await ppi.post(
+        "/api/v1/users/login",
+        { email, password },
+        { withCredentials: true }
+      );
+
+      if (response.data) {
+        setUser(response.data.data.user);
+        await fetchLikedIds();
+      }
+
+      return response;
+    } catch (error) {
+      // 🔑 Re-throw with backend message intact
+      throw error;
     }
-    return response;
   };
 
   const logout = async () => {

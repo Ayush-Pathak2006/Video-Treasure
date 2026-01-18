@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import { generateAccessAndRefreshTokens } from "../models/user.model.js";
 import crypto from "crypto";
 import { sendVerificationEmail } from "../utils/sendVerificationEmail.js";
-
+import { sendPasswordResetEmail } from "../utils/sendPasswordResetEmail.js";
 
 //verification email function (temporary)
 // const sendVerificationEmail = async (email, verificationUrl) => {
@@ -88,6 +88,23 @@ const loginUser = asyncHandler(async (req, res) => {
     if (!user) {
         throw new ApiError(404, "User does not exist");
     }
+
+    // 🚫 Block OAuth users from local login
+if (user.authProvider !== "local") {
+  throw new ApiError(
+    400,
+    `This account was registered using ${user.authProvider}. Please log in using that method.`
+  );
+}
+
+// 🚫 Block unverified users
+if (!user.isEmailVerified) {
+  throw new ApiError(
+    403,
+    "Please verify your email before logging in."
+  );
+}
+
 
     const isPasswordValid = await user.isPasswordCorrect(password);
     if (!isPasswordValid) {
@@ -255,6 +272,154 @@ const verifyEmail = asyncHandler(async (req, res) => {
     );
 });
 
+// 🔁 Resend verification email controller
+const resendVerificationEmail = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    // 1️⃣ Always respond generically (avoid email enumeration)
+    if (!email) {
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {},
+                "If the email exists and is unverified, a verification email has been sent."
+            )
+        );
+    }
+
+    const user = await User.findOne({ email });
+
+    // 2️⃣ If user does not exist or already verified → silent success
+    if (!user || user.isEmailVerified) {
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {},
+                "If the email exists and is unverified, a verification email has been sent."
+            )
+        );
+    }
+
+    // 3️⃣ Generate NEW verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+
+    const hashedToken = crypto
+        .createHash("sha256")
+        .update(verificationToken)
+        .digest("hex");
+
+    // 4️⃣ Overwrite old token & expiry
+    user.emailVerificationToken = hashedToken;
+    user.emailVerificationExpiry = Date.now() + 15 * 60 * 1000;
+
+    await user.save({ validateBeforeSave: false });
+
+    // 5️⃣ Build verification URL
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+    // 6️⃣ Send email
+    await sendVerificationEmail(user.email, verificationUrl);
+
+    // 7️⃣ Generic success response
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {},
+            "If the email exists and is unverified, a verification email has been sent."
+        )
+    );
+});
+
+
+const forgotPassword = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    // Always respond generically
+    if (!email) {
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {},
+                "If the email exists, a password reset link has been sent."
+            )
+        );
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user || user.authProvider !== "local") {
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {},
+                "If the email exists, a password reset link has been sent."
+            )
+        );
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    const hashedToken = crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
+
+    user.passwordResetToken = hashedToken;
+    user.passwordResetExpiry = Date.now() + 15 * 60 * 1000;
+
+    await user.save({ validateBeforeSave: false });
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+    await sendPasswordResetEmail(user.email, resetUrl);
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {},
+            "If the email exists, a password reset link has been sent."
+        )
+    );
+});
+
+
+const resetPassword = asyncHandler(async (req, res) => {
+    const { token } = req.query;
+    const { password } = req.body;
+
+    if (!token || !password) {
+        throw new ApiError(400, "Invalid request");
+    }
+
+    const hashedToken = crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
+
+    const user = await User.findOne({
+        passwordResetToken: hashedToken,
+        passwordResetExpiry: { $gt: Date.now() }
+    });
+
+    if (!user) {
+        throw new ApiError(400, "Invalid or expired reset token");
+    }
+
+    user.password = password;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpiry = undefined;
+
+    await user.save();
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {},
+            "Password reset successful. You can now log in."
+        )
+    );
+});
 
 
 export {
@@ -262,5 +427,8 @@ export {
     loginUser,
     logoutUser,
     refreshAccessToken,
-    verifyEmail
+    verifyEmail,
+    resendVerificationEmail,
+    forgotPassword,
+    resetPassword
 };

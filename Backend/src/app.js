@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import videoRouter from './routes/video.routes.js';
 import userRouter from './routes/user.routes.js';
 import likeRouter from './routes/like.routes.js'; 
+import { errorHandler } from "./middlewares/error.middleware.js";
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use("/api/v1/test", (req, res) => {
 app.use("/api/v1/videos", videoRouter);
 app.use("/api/v1/users", userRouter);   
 app.use("/api/v1/likes", likeRouter);
-
+// app.use("/api/v1/users", userRouter);
+app.use(errorHandler);
 
 export { app };

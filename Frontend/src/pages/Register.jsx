@@ -24,9 +24,9 @@ function Register() {
       );
 
       // Redirect to login after short delay
-      setTimeout(() => {
-        navigate('/login');
-      }, 2500);
+      // setTimeout(() => {
+      //   navigate('/login');
+      // }, 2500);
 
     } catch (err) {
       setError(

@@ -35,8 +35,8 @@ function VerifyEmail() {
       } catch (error) {
         setStatus("error");
         setMessage(
-          error.response?.data?.message ||
-            "Verification failed or link expired."
+          // error.response?.data?.message ||
+            "Wait for few seconds or try again."
         );
       }
     };
