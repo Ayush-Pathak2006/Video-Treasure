@@ -54,11 +54,11 @@ function Login() {
       });
 
       setResendMessage(
-        "If the email exists and is unverified, a verification email has been sent."
+        "If the email exists and is unverified, a verification email has been sent.",
       );
     } catch (err) {
       setResendMessage(
-        "Something went wrong while resending verification email."
+        "Something went wrong while resending verification email.",
       );
     } finally {
       setResendLoading(false);
@@ -128,6 +128,13 @@ function Login() {
             {resendLoading ? "Sending..." : "Resend verification email"}
           </button>
         )}
+
+        <a
+          href="http://localhost:8000/api/v1/auth/google"
+          className="w-full py-2 mt-4 flex justify-center items-center border border-white/20 rounded-md text-white hover:bg-white/10"
+        >
+          Continue with Google
+        </a>
 
         <p className="text-sm text-center text-gray-400">
           Don't have an account?{" "}

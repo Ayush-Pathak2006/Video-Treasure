@@ -7,6 +7,10 @@ import userRouter from './routes/user.routes.js';
 import likeRouter from './routes/like.routes.js'; 
 import { errorHandler } from "./middlewares/error.middleware.js";
 
+import passport from "passport";
+import "./config/passport.js";
+import authRoutes from "./routes/auth.routes.js";
+
 const app = express();
 
 app.use(cors({
@@ -14,10 +18,14 @@ app.use(cors({
     credentials: true,
     optionsSuccessStatus: 200
 }));
+app.use(passport.initialize());
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public"));
+
+
+
 app.use(cookieParser());
 
 app.use("/api/v1/test", (req, res) => {
@@ -29,7 +37,7 @@ app.use("/api/v1/test", (req, res) => {
 app.use("/api/v1/videos", videoRouter);
 app.use("/api/v1/users", userRouter);   
 app.use("/api/v1/likes", likeRouter);
-// app.use("/api/v1/users", userRouter);
+app.use("/api/v1/auth", authRoutes);
 app.use(errorHandler);
 
 export { app };
