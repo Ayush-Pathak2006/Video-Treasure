@@ -5,8 +5,14 @@ import { Like } from "../models/like.model.js";
 import { Video } from "../models/video.model.js";
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
-    // Frontend will send video details in the body
-    const { platformVideoId, title, thumbnail, channelTitle } = req.body;
+    const {
+        platform = "youtube",
+        platformVideoId,
+        title,
+        thumbnail,
+        channelTitle,
+        query = null,
+    } = req.body;
     const userId = req.user._id;
 
     if (!platformVideoId) {
@@ -14,17 +20,19 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     }
 
     // 1. Find or create the video in our database
-    let video = await Video.findOne({ platformVideoId });
+    let video = await Video.findOne({ platform, platformVideoId });
     if (!video) {
         // If the frontend doesn't provide all details, throw an error
         if (!title || !thumbnail || !channelTitle) {
             throw new ApiError(400, "Video details are required for the first like");
         }
         video = await Video.create({
+            platform,
             platformVideoId,
             title,
             thumbnail,
-            channelTitle
+            channelTitle,
+            query,
         });
     }
 
@@ -71,6 +79,7 @@ const getLikedVideos = asyncHandler(async (req, res) => {
         {
             $unwind: "$videoDetails"
         },
+         { $sort: { createdAt: -1 } },
         {
             $replaceRoot: { newRoot: "$videoDetails" }
         }
@@ -85,14 +94,19 @@ const getLikedVideoIds = asyncHandler(async (req, res) => {
     const userId = req.user._id;
 
     // Find all likes by the user
-    const likes = await Like.find({ likedBy: userId }).populate('video');
+    const likes = await Like.find({ likedBy: userId }).populate(
+    "video",
+    "platformVideoId"
+  );
 
     // Extract the platformVideoId from each liked video
-    const likedVideoIds = likes.map(like => like.video.platformVideoId);
+    const likedVideoIds = likes
+  .filter(like => like.video !== null) // 🔥 CRITICAL
+  .map(like => like.video.platformVideoId);
 
     return res
         .status(200)
         .json(new ApiResponse(200, { likedVideoIds }, "Liked video IDs fetched successfully"));
 });
 
-export { toggleVideoLike, getLikedVideos, getLikedVideoIds};
+export { toggleVideoLike, getLikedVideos, getLikedVideoIds };
