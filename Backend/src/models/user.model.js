@@ -69,7 +69,7 @@ const userSchema = new Schema(
   },
 );
 
-// Pre-save hook to hash password before saving
+// Pre-saving hook to hash password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, 10);
@@ -82,7 +82,8 @@ userSchema.methods.isPasswordCorrect = async function (password) {
 };
 
 // Methods to generate tokens
-userSchema.methods.generateAccessToken = function () {
+userSchema.methods.generateAccessToken = function () { //userSchema.methods.generateAccessToken = function () { ... } I am ading this function with userSchema
+
   return jwt.sign(
     {
       _id: this._id,
@@ -96,7 +97,7 @@ userSchema.methods.generateAccessToken = function () {
     },
   );
 };
-userSchema.methods.generateRefreshToken = function () {
+userSchema.methods.generateRefreshToken = function () { //same as above but for refresh token
   return jwt.sign(
     {
       _id: this._id,
@@ -108,7 +109,7 @@ userSchema.methods.generateRefreshToken = function () {
   );
 };
 
-export const generateAccessAndRefreshTokens = async (userId) => {
+export const generateAccessAndRefreshTokens = async (userId) => { //this is a utility function that will be used in the auth controller to generate both access and refresh tokens when a user logs in or refreshes their token
   try {
     const user = await User.findById(userId);
     const accessToken = user.generateAccessToken();

@@ -7,4 +7,4 @@ class ApiResponse {
     }
 }
 
-export { ApiResponse };
+export { ApiResponse };//It is standard way of sending response in this project. It will make work easy in froontend.

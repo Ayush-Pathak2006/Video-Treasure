@@ -3,14 +3,14 @@ import mongoose, { Schema } from "mongoose";
 const likeSchema = new Schema(
   {
     video: {
-      type: Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId, //In this line I am only storing the reference to the video, not the entire video data
       ref: "Video",
       required: true,
       index: true,
     },
 
     likedBy: {
-      type: Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId, // Reference to the user who liked the video
       ref: "User",
       required: true,
       index: true,

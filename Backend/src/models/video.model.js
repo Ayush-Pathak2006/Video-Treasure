@@ -36,7 +36,12 @@ const videoSchema = new Schema(
       required: true,
     },
 
-    publishedAt: Date,
+    publishedAt: {
+      type: Date,
+      required: true,
+      index: true,
+    },
+
 
     fetchedAt: {
       type: Date,

@@ -1,7 +1,7 @@
 import { ApiResponse } from "../utils/ApiResponse.js";
 
 const oauthSuccess = async (req, res) => {
-  const user = req.user;
+  const user = req.user;//Here we just make user === user form the db which follows our model and have properties of userSchema. We do this auth.middleware.js file.
 
   const accessToken = user.generateAccessToken();
   const refreshToken = user.generateRefreshToken();

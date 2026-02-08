@@ -5,3 +5,5 @@ const asyncHandler = (requestHandler) => {
 };
 
 export { asyncHandler };
+
+//this file is so I do not have to write try catch block in every controller.

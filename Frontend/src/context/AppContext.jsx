@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import axios from "axios";
 import ppi from "../api/axios";
 
 const AuthContext = createContext();
