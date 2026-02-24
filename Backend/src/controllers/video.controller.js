@@ -7,12 +7,13 @@ const searchVideos = async (req, res) => {
     return res.status(400).json({ error: "Search query is required" });
   }
 
-  const { videos, nextCursor } = await fetchVideosByQuery(query, cursor);
+  const { videos, nextCursor, hasMore } = await fetchVideosByQuery(query, cursor);
 
   return res.status(200).json({
     data: {
       videos,
       nextCursor,
+      hasMore,
     },
   });
 };

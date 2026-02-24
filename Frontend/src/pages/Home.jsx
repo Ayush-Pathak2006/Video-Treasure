@@ -140,8 +140,6 @@ function Home() {
     setQuery,
     videos,
     setVideos,
-    nextPageToken,
-    setNextPageToken,
   } = useSearch();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -149,34 +147,44 @@ function Home() {
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchVideos = async (searchQuery, cursorValue = null) => {
-  if (!searchQuery || loading) return;
-
-  setLoading(true);
-
-  try {
-    const res = await ppi.get("/api/v1/videos/search", {
-      params: {
-        q: searchQuery,
-        cursor: cursorValue,
-      },
+  const mergeUniqueVideos = (existingVideos, incomingVideos) => {
+    const seen = new Set(existingVideos.map(video => video.platformVideoId));
+    const uniqueIncoming = incomingVideos.filter(video => {
+      if (seen.has(video.platformVideoId)) return false;
+      seen.add(video.platformVideoId);
+      return true;
     });
 
-    const { videos: newVideos, nextCursor } = res.data.data;
+  return [...existingVideos, ...uniqueIncoming];
+  };
 
-    setVideos(prev =>
-      cursorValue ? [...prev, ...newVideos] : newVideos
-    );
+   const fetchVideos = async (searchQuery, cursorValue = null, isLoadMore = false) => {
+    if (!searchQuery || loading) return;
+    if (isLoadMore && !cursorValue) return;
 
-    setCursor(nextCursor);
-    setHasMore(res.data.data.hasMore);  // ✅ KEY CHANGE
+    setLoading(true);
+    setError(null);
 
-  } catch (err) {
-    console.error(err);
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      const res = await ppi.get("/api/v1/videos/search", {
+        params: {
+          q: searchQuery,
+          cursor: cursorValue,
+        },
+      });
+
+   const { videos: newVideos, nextCursor, hasMore: moreAvailable } = res.data.data;
+
+  setVideos(prev => (isLoadMore ? mergeUniqueVideos(prev, newVideos) : newVideos));
+      setCursor(nextCursor);
+      setHasMore(moreAvailable);
+    } catch (err) {
+      console.error(err);
+      setError("Could not fetch videos. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   const handleSearch = (event) => {
@@ -191,12 +199,11 @@ function Home() {
     setCursor(null);
     setHasMore(true);
 
-    fetchVideos(newQuery, null);
+    fetchVideos(newQuery, null, false);
   };
 
   const observer = useRef();
-  console.log("👀 Observer fired", { query, cursor });
-
+  
  const lastVideoElementRef = useCallback(
   (node) => {
     if (loading) return;
@@ -206,7 +213,7 @@ function Home() {
 
     observer.current = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting) {
-        fetchVideos(query, cursor);
+        fetchVideos(query, cursor, true);
       }
     });
 
@@ -252,14 +259,20 @@ function Home() {
             {videos.map((video, index) => {
               if (videos.length === index + 1) {
                 return (
-                  <div ref={lastVideoElementRef} key={video.platformVideoId}>
+                  <div ref={lastVideoElementRef} key={`${video.platformVideoId}-${index}`}>
                     <VideoCard video={video} />
                   </div>
                 );
               }
-              return <VideoCard key={video.platformVideoId} video={video} />;
+               return <VideoCard key={`${video.platformVideoId}-${index}`} video={video} />;
             })}
           </div>
+        )}
+
+        {!loading && hasSearched && videos.length > 0 && !hasMore && (
+          <p className="text-center text-white/60 mt-8">
+            This is all the videos available on this topic.
+          </p>
         )}
 
         {loading && videos.length > 0 && <Loader />}

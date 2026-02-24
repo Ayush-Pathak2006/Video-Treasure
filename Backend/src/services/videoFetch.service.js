@@ -4,68 +4,75 @@ import { searchYouTube } from "../providers/youtube.provider.js";
 
 const PAGE_SIZE = 12;
 const API_REFILL_THRESHOLD = 5;
+const YOUTUBE_PLATFORM = "youtube";
 
-export const fetchVideosByQuery = async (query, cursor = null) => {
-  // 1️⃣ Build DB filter
-  const filter = { query };
-
-  if (cursor) {
-    filter.publishedAt  = { $lt: new Date(cursor) };
-  }
-
-  // 2️⃣ Count remaining DB videos
-  const remainingCount = await Video.countDocuments({
+const buildVideoFilter = (query, cursorDate) => ({
   query,
-  ...(cursor && { createdAt: { $lt: new Date(cursor) } })
+  ...(cursorDate && { publishedAt: { $lt: cursorDate } }),
 });
 
+const getOrCreateQueryState = async query => {
+  const existingState = await QueryState.findOne({
+    query,
+    platform: YOUTUBE_PLATFORM,
+  });
 
-  // 3️⃣ Hydrate from API if DB is running low
-  if (remainingCount < API_REFILL_THRESHOLD) {
-    let state = await QueryState.findOne({ query, platform: "youtube" });
+  if (existingState) {
+    return existingState;
+  }
+  return QueryState.create({ query, platform: YOUTUBE_PLATFORM });
+};
 
-    if (!state) {
-      state = await QueryState.create({ query });
-    }
-
-    if (!state.exhausted) {
-      const { videos: apiVideos, nextPageToken } =
-        await searchYouTube(query, state.nextPageToken);
-
-      if (apiVideos.length > 0) {
-        await Video.insertMany(apiVideos, { ordered: false }).catch(() => {});
-      }
-
-      if (nextPageToken) {
-        state.nextPageToken = nextPageToken;
-      } else {
-        // No more pages in YouTube
-        state.exhausted = true;
-      }
-
-      await state.save();
-
-      console.log("📡 Fetching YouTube page:", state.nextPageToken);
-
-    }
+const refillVideosFromApi = async (query, state) => {
+  if (state.exhausted) {
+    console.log(`ℹ️ [videos:${query}] YouTube source exhausted. Serving from DB only.`);
+    return state;
   }
 
-  // 4️⃣ Fetch DB page
+  const { videos: apiVideos, nextPageToken } = await searchYouTube(
+    query,
+    state.nextPageToken
+  );
+
+  if (apiVideos.length > 0) {
+    await Video.insertMany(apiVideos, { ordered: false }).catch(() => {});
+  }
+  if (nextPageToken) {
+    state.nextPageToken = nextPageToken;
+    console.log(
+      `📡 [videos:${query}] Fetched ${apiVideos.length} videos from YouTube. Next page token available.`
+    );
+  } else {
+    state.exhausted = true;
+    console.log(
+      `🛑 [videos:${query}] YouTube returned no nextPageToken. All available pages fetched.`
+    );
+  }
+  await state.save();
+  return state;
+};
+
+export const fetchVideosByQuery = async (query, cursor = null) => {
+  const cursorDate = cursor ? new Date(cursor) : null;
+  const filter = buildVideoFilter(query, cursorDate);
+  const remainingCount = await Video.countDocuments(filter);
+  let state = await QueryState.findOne({ query, platform: YOUTUBE_PLATFORM });
+  if (remainingCount < API_REFILL_THRESHOLD) {
+    state = await getOrCreateQueryState(query);
+    state = await refillVideosFromApi(query, state);
+  }
   const videos = await Video.find(filter)
     .sort({ publishedAt: -1 })
     .limit(PAGE_SIZE);
+    const nextCursor = videos.length > 0 ? videos[videos.length - 1].publishedAt : null;
+    const hasMore = Boolean(nextCursor) && (!state?.exhausted || videos.length === PAGE_SIZE);
 
-  // 5️⃣ Cursor logic
-  const nextCursor =
-    videos.length === PAGE_SIZE
-      ? videos[videos.length - 1].publishedAt
-      : null;
-
+  if (!hasMore) {
+    console.log(`✅ [videos:${query}] No more videos available for infinite scroll.`);
+  }
   return {
-  videos,
-  nextCursor,
-  hasMore:
-    nextCursor !== null || !state.exhausted
-};
-
+    videos,
+    nextCursor,
+    hasMore,
+  };
 };
