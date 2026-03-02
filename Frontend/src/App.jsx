@@ -16,7 +16,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/watch/:id" element={<Player />} />
+      <Route path="/watch/:platform/:id" element={<Player />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify-email" element={<VerifyEmail />} />

@@ -5,6 +5,7 @@ import { useAuth } from "../context/AppContext";
 import { useSearch } from "../context/AppContext";
 import ppi from "../api/axios";
 
+const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
 const SearchBar = ({ onSearch, loading }) => (
   <form onSubmit={onSearch} className="w-full max-w-2xl mx-auto">
     <div className="relative">
@@ -41,10 +42,10 @@ const SearchBar = ({ onSearch, loading }) => (
 
 const VideoCard = ({ video }) => {
   const { user, likedVideoIds, toggleLike } = useAuth();
+  const videoKey = getVideoKey(video);
+  const isLiked = likedVideoIds.has(videoKey);
 
-  const isLiked = likedVideoIds.has(video.platformVideoId);
-
-  const handleLike = async (e) => {
+  const handleLike = async e => {
     e.preventDefault();
     e.stopPropagation();
     toggleLike(video);
@@ -54,27 +55,22 @@ const VideoCard = ({ video }) => {
       return;
     }
 
-    const newLikedIds = new Set(likedVideoIds);
-    if (isLiked) {
-      newLikedIds.delete(video.platformVideoId);
-    } else {
-      newLikedIds.add(video.platformVideoId);
-    }
+
 
     // setLikedVideoIds(newLikedIds);
 
     try {
-      const videoData = {
-        platformVideoId: video.platformVideoId,
-        title: video.title,
-        thumbnail: video.thumbnail,
-        channelTitle: video.channelTitle,
-      };
-
-      const response = await ppi.post("/api/v1/likes/toggle", videoData, {
-        withCredentials: true,
-      });
-
+      await ppi.post(
+        "/api/v1/likes/toggle",
+        {
+          platform: video.platform,
+          platformVideoId: video.platformVideoId,
+          title: video.title,
+          thumbnail: video.thumbnail,
+          channelTitle: video.channelTitle,
+        },
+        { withCredentials: true }
+      );
       // setIsLiked(prev => !prev);
     } catch (error) {
       console.error("Failed to toggle like:", error);
@@ -83,7 +79,7 @@ const VideoCard = ({ video }) => {
 
   return (
     <div className="bg-white/5 p-4 rounded-xl border border-white/10 shadow-lg group transform hover:-translate-y-2 transition-all duration-300 cursor-pointer relative">
-      <Link to={`/watch/${video.platformVideoId}`} className="block">
+      <Link to={`/watch/${video.platform}/${video.platformVideoId}`} className="block">
         <div className="relative mb-4 aspect-video rounded-lg overflow-hidden">
           <img
             src={video.thumbnail}
@@ -135,12 +131,7 @@ const Loader = () => (
 
 function Home() {
   const { loading: authLoading } = useAuth();
-  const {
-    query,
-    setQuery,
-    videos,
-    setVideos,
-  } = useSearch();
+  const { query, setQuery, videos, setVideos } = useSearch();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -148,10 +139,11 @@ function Home() {
   const [hasMore, setHasMore] = useState(true);
 
   const mergeUniqueVideos = (existingVideos, incomingVideos) => {
-    const seen = new Set(existingVideos.map(video => video.platformVideoId));
+    const seen = new Set(existingVideos.map(video => getVideoKey(video)));
     const uniqueIncoming = incomingVideos.filter(video => {
-      if (seen.has(video.platformVideoId)) return false;
-      seen.add(video.platformVideoId);
+      const key = getVideoKey(video);
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
 
@@ -187,7 +179,7 @@ function Home() {
   };
 
 
-  const handleSearch = (event) => {
+  const handleSearch = event => {
     event.preventDefault();
 
     const newQuery = event.target.elements.query.value.trim();
@@ -204,23 +196,23 @@ function Home() {
 
   const observer = useRef();
   
- const lastVideoElementRef = useCallback(
-  (node) => {
-    if (loading) return;
-    if (!hasMore) return;
+const lastVideoElementRef = useCallback(
+    node => {
+      if (loading) return;
+      if (!hasMore) return;
 
-    if (observer.current) observer.current.disconnect();
+      if (observer.current) observer.current.disconnect();
 
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) {
-        fetchVideos(query, cursor, true);
-      }
-    });
+      observer.current = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) {
+          fetchVideos(query, cursor, true);
+        }
+      });
 
-    if (node) observer.current.observe(node);
-  },
-  [loading, hasMore, cursor, query]
-);
+      if (node) observer.current.observe(node);
+    },
+    [loading, hasMore, cursor, query]
+  );
 
 
   if (authLoading) {
@@ -257,14 +249,15 @@ function Home() {
         {videos.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-12">
             {videos.map((video, index) => {
+               const key = `${getVideoKey(video)}-${index}`;
               if (videos.length === index + 1) {
                 return (
-                  <div ref={lastVideoElementRef} key={`${video.platformVideoId}-${index}`}>
+                  <div ref={lastVideoElementRef} key={key}>
                     <VideoCard video={video} />
                   </div>
                 );
               }
-               return <VideoCard key={`${video.platformVideoId}-${index}`} video={video} />;
+               return <VideoCard key={key} video={video} />;
             })}
           </div>
         )}

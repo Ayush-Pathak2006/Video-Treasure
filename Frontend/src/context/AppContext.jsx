@@ -15,6 +15,8 @@ export const AppProvider = ({ children }) => {
   const [videos, setVideos] = useState([]);
   const [nextPageToken, setNextPageToken] = useState(null);
 
+  const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
+
   const fetchLikedIds = async () => {
     try {
       const response = await ppi.get("/api/v1/likes/ids", {
@@ -55,11 +57,12 @@ export const AppProvider = ({ children }) => {
   const toggleLike = async (video) => {
     if (!user) return;
     const newLikedIds = new Set(likedVideoIds);
-    const isLiked = newLikedIds.has(video.platformVideoId);
+     const videoKey = getVideoKey(video);
+    const isLiked = newLikedIds.has(videoKey);
     if (isLiked) {
-      newLikedIds.delete(video.platformVideoId);
+      newLikedIds.delete(videoKey);
     } else {
-      newLikedIds.add(video.platformVideoId);
+      newLikedIds.add(videoKey);
     }
     setLikedVideoIds(newLikedIds);
     try {

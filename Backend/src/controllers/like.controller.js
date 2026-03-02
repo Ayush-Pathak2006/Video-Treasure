@@ -96,13 +96,13 @@ const getLikedVideoIds = asyncHandler(async (req, res) => {
     // Find all likes by the user
     const likes = await Like.find({ likedBy: userId }).populate(
     "video",
-    "platformVideoId"
+    "platform platformVideoId"
   );
 
     // Extract the platformVideoId from each liked video
     const likedVideoIds = likes
   .filter(like => like.video !== null) // 🔥 CRITICAL
-  .map(like => like.video.platformVideoId);
+  .map(like => `${like.video.platform}:${like.video.platformVideoId}`);
 
     return res
         .status(200)

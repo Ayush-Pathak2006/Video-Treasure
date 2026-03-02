@@ -1,23 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import Header from '../components/Header';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AppContext';
 import ppi from '../api/axios';
 
+const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
+
+
 const LikedVideoCard = ({ video, onUnlike }) => {
   const { toggleLike } = useAuth();
 
-  const handleUnlikeClick = (e) => {
+  const handleUnlikeClick = e => {
     e.preventDefault();
     e.stopPropagation();
-    toggleLike(video); // Call the same global function
-    onUnlike(video.platformVideoId); // Update the local page state
+    toggleLike(video);
+    onUnlike(getVideoKey(video));
   };
 
   return (
     <div className="bg-white/5 p-4 rounded-xl ... relative">
-      <Link to={`/watch/${video.platformVideoId}`} className="block">
+            <Link to={`/watch/${video.platform}/${video.platformVideoId}`} className="block">
         <div className="relative mb-4 aspect-video rounded-lg overflow-hidden">
           <img src={video.thumbnail} alt={video.title} />
         </div>
@@ -52,8 +54,8 @@ function LikedVideos() {
   }, []);
 
   // Function to remove a video from the page's state instantly
-  const handleUnlike = (platformVideoId) => {
-    setVideos(currentVideos => currentVideos.filter(v => v.platformVideoId !== platformVideoId));
+  const handleUnlike = videoKey => {
+    setVideos(currentVideos => currentVideos.filter(v => getVideoKey(v) !== videoKey));
   };
 
   return (

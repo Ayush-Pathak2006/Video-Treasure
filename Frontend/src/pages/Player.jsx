@@ -1,9 +1,20 @@
-import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React from "react";
+import { useParams, Link } from "react-router-dom";
+
+const buildEmbedUrl = (platform, id) => {
+  if (platform === "dailymotion") {
+    return `https://www.dailymotion.com/embed/video/${id}?autoplay=1`;
+  }
+
+  return `https://www.youtube.com/embed/${id}?autoplay=1`;
+};
 
 function Player() {
-  const { id } = useParams(); 
-  const youtubeUrl = `https://www.youtube.com/embed/${id}?autoplay=1`;
+  const { platform = "youtube", id } = useParams();
+  const embedUrl = buildEmbedUrl(platform, id);
+  const title =
+    platform === "dailymotion" ? "Dailymotion video player" : "YouTube video player";
+
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -13,8 +24,8 @@ function Player() {
           <iframe
             width="100%"
             height="100%"
-            src={youtubeUrl}
-            title="YouTube video player"
+            src={embedUrl}
+            title={title}
             frameBorder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -23,12 +34,12 @@ function Player() {
         
         {/* Back to Home Button */}
         <div className="mt-8 text-center">
-            <Link 
-                to="/"
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-full transition-all duration-300"
-            >
-                ← Back to Search
-            </Link>
+           <Link
+            to="/"
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-full transition-all duration-300"
+          >
+            ← Back to Search
+          </Link>
         </div>
       </div>
     </div>

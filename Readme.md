@@ -1,6 +1,6 @@
 # 🎥 Video Treasure (V1)
 
-A backend-focused video aggregation platform that allows users to search for videos from multiple platforms (YouTube, X, Instagram) through a single interface.
+A backend-focused video aggregation platform that allows users to search for videos from multiple platforms (YouTube, Dailymotion) through a single interface.
 
 This project is designed as a **production-style system**, emphasizing authentication, API orchestration, caching, and scalability rather than just UI.
 
@@ -29,7 +29,7 @@ The platform acts as a unified aggregation layer that:
 - **Backend:** Node.js   
 - **Authentication:** JWT, OAuth 2.0  
 - **Database:** MongoDB   
-- **External APIs:** YouTube Data API, X API, Instagram API  
+- **External APIs:** YouTube Data API, Dailymotion API  
 
 ---
 

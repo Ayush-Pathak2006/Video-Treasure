@@ -4,7 +4,7 @@ const videoSchema = new Schema(
   {
     platform: {
       type: String,
-      enum: ["youtube"], // scalable later
+      enum: ["youtube", "dailymotion"],
       required: true,
       index: true,
     },

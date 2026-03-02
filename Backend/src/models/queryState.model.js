@@ -5,7 +5,7 @@ const queryStateSchema = new mongoose.Schema(
     query: {
       type: String,
       required: true,
-      unique: true,
+      index: true,
     },
     platform: {
       type: String,
@@ -14,6 +14,8 @@ const queryStateSchema = new mongoose.Schema(
     nextPageToken: {
       type: String,
       default: null,
+      enum: ["youtube", "dailymotion"],
+      index: true,
     },
     exhausted: {
       type: Boolean,
@@ -22,5 +24,6 @@ const queryStateSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+queryStateSchema.index({ query: 1, platform: 1 }, { unique: true });
 
 export const QueryState = mongoose.model("QueryState", queryStateSchema);
