@@ -30,9 +30,11 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
             platform,
             platformVideoId,
             title,
+            description: req.body.description || "",
             thumbnail,
             channelTitle,
             query,
+            publishedAt: req.body.publishedAt || new Date(),
         });
     }
 

@@ -1,10 +1,44 @@
 import axios from "axios";
 
 const DAILYMOTION_SEARCH_API = "https://api.dailymotion.com/videos";
+const DAILYMOTION_TOKEN_API = "https://api.dailymotion.com/oauth/token";
 const PAGE_SIZE = 12;
+
+let cachedToken = null;
+let tokenExpiresAt = 0;
+
+const getDailymotionToken = async () => {
+  const apiKey = process.env.DAILYMOTION_API_KEY;
+  const clientSecret = process.env.DAILYMOTION_CLIENT_SECRET;
+
+  if (!apiKey || !clientSecret) {
+    return null;
+  }
+
+  if (cachedToken && Date.now() < tokenExpiresAt) {
+    return cachedToken;
+  }
+
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: apiKey,
+    client_secret: clientSecret,
+    scope: "read",
+  });
+
+  const response = await axios.post(DAILYMOTION_TOKEN_API, body.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+
+  cachedToken = response.data.access_token;
+  tokenExpiresAt = Date.now() + (response.data.expires_in - 60) * 1000;
+
+  return cachedToken;
+};
 
 export const searchDailymotion = async (query, page = null) => {
   const pageNumber = page ? Number(page) : 1;
+  const token = await getDailymotionToken();
   const params = {
     search: query,
     limit: PAGE_SIZE,
@@ -12,7 +46,8 @@ export const searchDailymotion = async (query, page = null) => {
     fields: "id,title,description,thumbnail_url,created_time,channel",
   };
 
-  const response = await axios.get(DAILYMOTION_SEARCH_API, { params });
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const response = await axios.get(DAILYMOTION_SEARCH_API, { params, headers });
 
   const list = response.data.list ?? [];
   const videos = list.map(item => ({
@@ -28,10 +63,9 @@ export const searchDailymotion = async (query, page = null) => {
 
   const hasExplicitMore = Boolean(response.data.has_more);
   const hasNextBySize = list.length === PAGE_SIZE;
-  const hasMore = hasExplicitMore || hasNextBySize;
 
   return {
     videos,
-    nextPageToken: hasMore ? String(pageNumber + 1) : null,
+    nextPageToken: hasExplicitMore || hasNextBySize ? String(pageNumber + 1) : null,
   };
 };

@@ -8,99 +8,160 @@ const API_REFILL_THRESHOLD = 5;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
 
 const PROVIDERS = {
-  youtube: {
-    name: "YouTube",
-    search: searchYouTube,
-  },
-  dailymotion: {
-    name: "Dailymotion",
-    search: searchDailymotion,
-  },
+  youtube: { name: "YouTube", search: searchYouTube },
+  dailymotion: { name: "Dailymotion", search: searchDailymotion },
 };
-const buildVideoFilter = (query, cursorDate) => ({
+
+const mapProviderErrorToReason = error => {
+  const status = error?.response?.status;
+
+  if (status === 429) {
+    return {
+      exhaustedReason: "rate_limit_hit",
+      logMessage: "API rate limit hit.",
+    };
+  }
+
+  if (status === 401 || status === 403) {
+    return {
+      exhaustedReason: "api_access_denied",
+      logMessage: "API access denied (invalid key, quota exhausted, or key restriction mismatch).",
+    };
+  }
+
+  return null;
+};
+
+const buildVideoFilter = (query, cursorDate, platformFilter) => ({
   query,
+  ...(platformFilter !== "all" && { platform: platformFilter }),
   ...(cursorDate && { publishedAt: { $lt: cursorDate } }),
 });
 
-const getOrCreateQueryState = async (query, platform) => {
-  const existingState = await QueryState.findOne({
-    query,
-    platform,
-  });
-
-  if (existingState) {
-    return existingState;
+const getPlatformsToSearch = platform => {
+  if (!platform || platform === "all") return SUPPORTED_PLATFORMS;
+  if (!SUPPORTED_PLATFORMS.includes(platform)) {
+    throw new Error(`Unsupported platform: ${platform}`);
   }
-  return QueryState.create({ query, platform });
+  return [platform];
 };
+
+const getOrCreateQueryState = async (query, platform) =>
+  QueryState.findOneAndUpdate(
+    { query, platform },
+    { $setOnInsert: { query, platform, exhausted: false, exhaustedReason: null, nextPageToken: null } },
+    { upsert: true, new: true }
+  );
 
 const refillVideosFromApi = async (query, platform, state) => {
   const provider = PROVIDERS[platform];
+
   if (state.exhausted) {
-    console.log(
-      `ℹ️ [videos:${query}] ${provider.name} source exhausted. Serving from DB only.`
-    );
+    console.log(`ℹ️ [videos:${query}] ${provider.name} exhausted (${state.exhaustedReason || "unknown"}).`);
     return state;
   }
 
-  const { videos: apiVideos, nextPageToken } = await provider.search(
-    query,
-    state.nextPageToken
-  );
+  try {
+    const { videos: apiVideos, nextPageToken } = await provider.search(query, state.nextPageToken);
 
-  if (apiVideos.length > 0) {
-    await Video.insertMany(apiVideos, { ordered: false }).catch(() => {});
+    if (apiVideos.length > 0) {
+      await Video.insertMany(apiVideos, { ordered: false }).catch(() => {});
+    }
+
+    if (nextPageToken) {
+      state.nextPageToken = nextPageToken;
+      console.log(`📡 [videos:${query}] ${provider.name}: fetched ${apiVideos.length} videos.`);
+    } else {
+      state.exhausted = true;
+      state.exhaustedReason = "all_videos_accessed";
+      console.log(`🛑 [videos:${query}] ${provider.name}: all videos for this query are accessed.`);
+    }
+  } catch (error) {
+    const providerError = mapProviderErrorToReason(error);
+
+    if (providerError) {
+      state.exhausted = true;
+      state.exhaustedReason = providerError.exhaustedReason;
+      console.log(`⚠️ [videos:${query}] ${provider.name}: ${providerError.logMessage}`);
+    } else {
+      throw error;
+    }
   }
-  if (nextPageToken) {
-    state.nextPageToken = nextPageToken;
-    console.log(
-       `📡 [videos:${query}] Fetched ${apiVideos.length} videos from ${provider.name}. Next page token available.`
-    );
-  } else {
-    state.exhausted = true;
-    console.log(
-       `🛑 [videos:${query}] ${provider.name} returned no nextPageToken. All available pages fetched.`
-    );
-  }
+
   await state.save();
   return state;
 };
 
-export const fetchVideosByQuery = async (query, cursor = null) => {
+const groupVideosByPlatform = videos =>
+  videos.reduce(
+    (acc, video) => {
+      acc[video.platform].push(video);
+      return acc;
+    },
+    { youtube: [], dailymotion: [] }
+  );
+
+export const fetchVideosByQuery = async (query, cursor = null, platform = "all") => {
   const cursorDate = cursor ? new Date(cursor) : null;
-  const filter = buildVideoFilter(query, cursorDate);
+  const platformsToSearch = getPlatformsToSearch(platform);
+  const filter = buildVideoFilter(query, cursorDate, platform);
+
   const remainingCount = await Video.countDocuments(filter);
   let statesByPlatform = {};
 
   if (remainingCount < API_REFILL_THRESHOLD) {
     const stateEntries = await Promise.all(
-      SUPPORTED_PLATFORMS.map(async platform => {
-        let state = await getOrCreateQueryState(query, platform);
-        state = await refillVideosFromApi(query, platform, state);
-        return [platform, state];
+      platformsToSearch.map(async currentPlatform => {
+        let state = await getOrCreateQueryState(query, currentPlatform);
+        state = await refillVideosFromApi(query, currentPlatform, state);
+        return [currentPlatform, state];
       })
     );
 
     statesByPlatform = Object.fromEntries(stateEntries);
   }
 
-  const videos = await Video.find(filter)
-    .sort({ publishedAt: -1 })
-    .limit(PAGE_SIZE);
-    const nextCursor =
-    videos.length > 0 ? videos[videos.length - 1].publishedAt : null;
-  const allSourcesExhausted =
-    Object.keys(statesByPlatform).length > 0 &&
-    Object.values(statesByPlatform).every(state => state.exhausted);
-  const hasMore =
-    Boolean(nextCursor) && (!allSourcesExhausted || videos.length === PAGE_SIZE);
+  const videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(PAGE_SIZE);
+  const nextCursor = videos.length > 0 ? videos[videos.length - 1].publishedAt : null;
+
+  const freshStates =
+    Object.keys(statesByPlatform).length > 0
+      ? statesByPlatform
+      : Object.fromEntries(
+          (
+            await QueryState.find({
+              query,
+              platform: { $in: platformsToSearch },
+            })
+          ).map(state => [state.platform, state])
+        );
+
+  const terminalReasonByPlatform = Object.fromEntries(
+    platformsToSearch.map(currentPlatform => {
+      const state = freshStates[currentPlatform];
+      return [currentPlatform, state?.exhausted ? state.exhaustedReason || "all_videos_accessed" : null];
+    })
+  );
+
+  const allSelectedPlatformsExhausted = platformsToSearch.every(currentPlatform => {
+    const state = freshStates[currentPlatform];
+    return Boolean(state?.exhausted);
+  });
+
+  const hasMore = Boolean(nextCursor) && (!allSelectedPlatformsExhausted || videos.length === PAGE_SIZE);
 
   if (!hasMore) {
-    console.log(`✅ [videos:${query}] No more videos available for infinite scroll.`);
+    const reasonText = Object.entries(terminalReasonByPlatform)
+      .map(([currentPlatform, reason]) => `${currentPlatform}: ${reason || "all_videos_accessed"}`)
+      .join(", ");
+    console.log(`✅ [videos:${query}] Infinite scroll exhausted. Reason => ${reasonText}`);
   }
+
   return {
     videos,
+    byPlatform: groupVideosByPlatform(videos),
     nextCursor,
     hasMore,
+    terminalReasonByPlatform,
   };
 };
