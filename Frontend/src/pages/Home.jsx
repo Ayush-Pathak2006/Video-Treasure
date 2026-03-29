@@ -150,7 +150,7 @@ const HorizontalSection = ({
         </div>
       </div>
 
-      <div ref={containerRef} className="flex gap-4 overflow-x-auto pb-3 scroll-smooth">
+      <div ref={containerRef} className="flex gap-4 overflow-x-auto pb-3 scroll-smooth hide-scrollbar">
         {videos.map((video, index) => (
           <VideoCard key={`${getVideoKey(video)}-${index}`} video={video} />
         ))}
@@ -187,7 +187,6 @@ function Home() {
   const [hasSearched, setHasSearched] = useState(false);
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(true);
-  const [terminalReasonByPlatform, setTerminalReasonByPlatform] = useState({});
   const [expandedPlatform, setExpandedPlatform] = useState(null);
 
   const youtubeRailRef = useRef(null);
@@ -206,7 +205,7 @@ function Home() {
     return [...existingVideos, ...uniqueIncoming];
   };
 
-  const fetchVideos = async (searchQuery, cursorValue = null, isLoadMore = false) => {
+  const fetchVideos = useCallback(async (searchQuery, cursorValue = null, isLoadMore = false) => {
     if (!searchQuery || loading) return;
     if (isLoadMore && !cursorValue) return;
 
@@ -226,20 +225,18 @@ function Home() {
         videos: newVideos,
         nextCursor,
         hasMore: moreAvailable,
-        terminalReasonByPlatform: reasonByPlatform,
       } = response.data.data;
 
       setVideos(previous => (isLoadMore ? mergeUniqueVideos(previous, newVideos) : newVideos));
       setCursor(nextCursor);
       setHasMore(moreAvailable);
-      setTerminalReasonByPlatform(reasonByPlatform || {});
     } catch (requestError) {
       console.error(requestError);
       setError("Could not fetch videos. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [loading, setVideos]);
 
   const handleSearch = event => {
     event.preventDefault();
@@ -252,7 +249,6 @@ function Home() {
     setCursor(null);
     setHasMore(true);
     setExpandedPlatform(null);
-    setTerminalReasonByPlatform({});
 
     fetchVideos(newQuery, null, false);
   };
@@ -271,7 +267,7 @@ function Home() {
 
       if (node) observer.current.observe(node);
     },
-    [loading, hasMore, query, cursor]
+    [loading, hasMore, query, cursor, fetchVideos]
   );
 
   const groupedVideos = useMemo(
@@ -294,16 +290,7 @@ function Home() {
     }, 0);
   };
 
-  const endReasonText = Object.entries(terminalReasonByPlatform)
-    .filter(([, reason]) => Boolean(reason))
-    .map(([platformName, reason]) => {
-      if (reason === "rate_limit_hit") return `${platformName}: API rate limit hit`;
-      if (reason === "api_access_denied") {
-        return `${platformName}: API access denied (check API key/quota/restrictions)`;
-      }
-      return `${platformName}: all videos for this topic are fetched`;
-    })
-    .join(" | ");
+
 
   if (authLoading) {
     return <div className="text-center py-10">Loading...</div>;
@@ -377,7 +364,7 @@ function Home() {
 
         {!loading && hasSearched && videos.length > 0 && !hasMore && (
           <p className="text-center text-white/70 mt-8">
-            All videos are here.{endReasonText ? ` (${endReasonText})` : ""}
+            All videos are here.
           </p>
         )}
       </main>

@@ -17,3 +17,11 @@ radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.3), rgba(17, 24, 39, 0) 
     background-position: 100% 50%;
   }
 }
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

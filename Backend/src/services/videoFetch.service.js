@@ -4,8 +4,8 @@ import { searchYouTube } from "../providers/youtube.provider.js";
 import { searchDailymotion } from "../providers/dailymotion.provider.js";
 
 const PAGE_SIZE = 12;
-const API_REFILL_THRESHOLD = 5;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
+const MAX_REFILL_CYCLES = 4;
 
 const PROVIDERS = {
   youtube: { name: "YouTube", search: searchYouTube },
@@ -57,7 +57,6 @@ const refillVideosFromApi = async (query, platform, state) => {
   const provider = PROVIDERS[platform];
 
   if (state.exhausted) {
-    console.log(`ℹ️ [videos:${query}] ${provider.name} exhausted (${state.exhaustedReason || "unknown"}).`);
     return state;
   }
 
@@ -70,11 +69,11 @@ const refillVideosFromApi = async (query, platform, state) => {
 
     if (nextPageToken) {
       state.nextPageToken = nextPageToken;
-      console.log(`📡 [videos:${query}] ${provider.name}: fetched ${apiVideos.length} videos.`);
+      console.log(`📡 [videos:${query}] ${provider.name}: fetched ${apiVideos.length} videos from API and cached in DB.`);
     } else {
       state.exhausted = true;
       state.exhaustedReason = "all_videos_accessed";
-      console.log(`🛑 [videos:${query}] ${provider.name}: all videos for this query are accessed.`);
+      console.log(`🛑 [videos:${query}] ${provider.name}: all videos for this topic are fetched from API.`);
     }
   } catch (error) {
     const providerError = mapProviderErrorToReason(error);
@@ -101,40 +100,76 @@ const groupVideosByPlatform = videos =>
     { youtube: [], dailymotion: [] }
   );
 
+const countRemainingDbVideos = (query, platform, cursorDate) =>
+  Video.countDocuments(buildVideoFilter(query, cursorDate, platform));
+
+const loadStatesByPlatform = async (query, platformsToSearch) => {
+  const stateEntries = await Promise.all(
+    platformsToSearch.map(async currentPlatform => {
+      const state = await getOrCreateQueryState(query, currentPlatform);
+      return [currentPlatform, state];
+    })
+  );
+
+  return Object.fromEntries(stateEntries);
+};
+
+const refillFromApiUntilPageFilled = async ({ query, platform, cursorDate, platformsToSearch }) => {
+  let statesByPlatform = await loadStatesByPlatform(query, platformsToSearch);
+
+  for (let refillCycle = 0; refillCycle < MAX_REFILL_CYCLES; refillCycle += 1) {
+    const remainingInDb = await countRemainingDbVideos(query, platform, cursorDate);
+
+    if (remainingInDb >= PAGE_SIZE) {
+      break;
+    }
+
+    const activePlatforms = platformsToSearch.filter(currentPlatform => !statesByPlatform[currentPlatform]?.exhausted);
+
+    if (!activePlatforms.length) {
+      break;
+    }
+
+    await Promise.all(
+      activePlatforms.map(async currentPlatform => {
+        const state = statesByPlatform[currentPlatform] || (await getOrCreateQueryState(query, currentPlatform));
+        statesByPlatform[currentPlatform] = await refillVideosFromApi(query, currentPlatform, state);
+      })
+    );
+  }
+
+  return statesByPlatform;
+};
+
 export const fetchVideosByQuery = async (query, cursor = null, platform = "all") => {
   const cursorDate = cursor ? new Date(cursor) : null;
   const platformsToSearch = getPlatformsToSearch(platform);
   const filter = buildVideoFilter(query, cursorDate, platform);
 
-  const remainingCount = await Video.countDocuments(filter);
+  let videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(PAGE_SIZE);
+
   let statesByPlatform = {};
 
-  if (remainingCount < API_REFILL_THRESHOLD) {
-    const stateEntries = await Promise.all(
-      platformsToSearch.map(async currentPlatform => {
-        let state = await getOrCreateQueryState(query, currentPlatform);
-        state = await refillVideosFromApi(query, currentPlatform, state);
-        return [currentPlatform, state];
-      })
-    );
+  if (videos.length < PAGE_SIZE) {
+    statesByPlatform = await refillFromApiUntilPageFilled({
+      query,
+      platform,
+      cursorDate,
+      platformsToSearch,
+    });
 
-    statesByPlatform = Object.fromEntries(stateEntries);
+    videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(PAGE_SIZE);
   }
 
-  const videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(PAGE_SIZE);
   const nextCursor = videos.length > 0 ? videos[videos.length - 1].publishedAt : null;
+  const remainingAfterPage = nextCursor
+    ? await Video.countDocuments(buildVideoFilter(query, nextCursor, platform))
+    : 0;
 
   const freshStates =
     Object.keys(statesByPlatform).length > 0
       ? statesByPlatform
-      : Object.fromEntries(
-          (
-            await QueryState.find({
-              query,
-              platform: { $in: platformsToSearch },
-            })
-          ).map(state => [state.platform, state])
-        );
+      : await loadStatesByPlatform(query, platformsToSearch);
 
   const terminalReasonByPlatform = Object.fromEntries(
     platformsToSearch.map(currentPlatform => {
@@ -143,12 +178,8 @@ export const fetchVideosByQuery = async (query, cursor = null, platform = "all")
     })
   );
 
-  const allSelectedPlatformsExhausted = platformsToSearch.every(currentPlatform => {
-    const state = freshStates[currentPlatform];
-    return Boolean(state?.exhausted);
-  });
-
-  const hasMore = Boolean(nextCursor) && (!allSelectedPlatformsExhausted || videos.length === PAGE_SIZE);
+  const canStillFetchFromApi = platformsToSearch.some(currentPlatform => !freshStates[currentPlatform]?.exhausted);
+  const hasMore = remainingAfterPage > 0 || canStillFetchFromApi;
 
   if (!hasMore) {
     const reasonText = Object.entries(terminalReasonByPlatform)
