@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
-import React, { useState, useRef, useCallback, useMemo } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import Header from "../components/Header";
 import { useAuth, useSearch } from "../context/AppContext";
 import ppi from "../api/axios";
+
+const PAGE_SIZE_PER_PLATFORM = 4;
+const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
 
@@ -21,19 +24,8 @@ const SearchBar = ({ onSearch, loading }) => (
         disabled={loading}
         className="absolute top-1/2 right-4 -translate-y-1/2 text-white/50 hover:text-white transition-colors"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-6 w-6"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
       </button>
     </div>
@@ -58,17 +50,13 @@ const VideoCard = ({ video, fullWidth = false }) => {
   };
 
   return (
-    <div className={`bg-white/5 p-4 rounded-xl border border-white/10 shadow-lg group transform hover:-translate-y-1 transition-all duration-300 cursor-pointer relative ${fullWidth ? "w-full" : "min-w-[320px] max-w-[320px]"}`}>
+    <div
+      className={`bg-white/5 p-4 rounded-xl border border-white/10 shadow-lg group transform hover:-translate-y-1 transition-all duration-300 cursor-pointer relative ${fullWidth ? "w-full" : "min-w-[320px] max-w-[320px]"}`}
+    >
       <Link to={`/watch/${video.platform}/${video.platformVideoId}`} className="block">
         <div className="relative mb-4 aspect-video rounded-lg overflow-hidden">
-          <img
-            src={video.thumbnail}
-            alt={video.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-          <span className="absolute top-2 left-2 text-xs px-2 py-1 rounded-full bg-black/70 uppercase">
-            {video.platform}
-          </span>
+          <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <span className="absolute top-2 left-2 text-xs px-2 py-1 rounded-full bg-black/70 uppercase">{video.platform}</span>
         </div>
         <div className="mb-2">
           <h3 className="text-lg font-bold text-white line-clamp-2">{video.title}</h3>
@@ -77,17 +65,8 @@ const VideoCard = ({ video, fullWidth = false }) => {
       </Link>
 
       {user && (
-        <button
-          onClick={handleLike}
-          className="absolute top-2 right-2 text-red-500 transition-colors p-1 bg-black/20 rounded-full z-10"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill={isLiked ? "currentColor" : "none"}
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
+        <button onClick={handleLike} className="absolute top-2 right-2 text-red-500 transition-colors p-1 bg-black/20 rounded-full z-10">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={isLiked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -105,46 +84,25 @@ const PlatformHeading = ({ title, expandedPlatform, onToggle }) => {
   const isExpanded = expandedPlatform === title.toLowerCase();
 
   return (
-    <button
-      onClick={onToggle}
-      className="flex items-center gap-2 text-3xl font-extrabold tracking-wide uppercase"
-    >
+    <button onClick={onToggle} className="flex items-center gap-2 text-3xl font-extrabold tracking-wide uppercase">
       <span>{title}</span>
       <span className={`transition-transform ${isExpanded ? "rotate-180" : "rotate-0"}`}>⌄</span>
     </button>
   );
 };
 
-const HorizontalSection = ({
-  title,
-  videos,
-  containerRef,
-  onScrollLeft,
-  onScrollRight,
-  expandedPlatform,
-  onToggleExpand,
-}) => {
+const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScrollRight, expandedPlatform, onToggleExpand }) => {
   if (!videos.length) return null;
 
   return (
     <section className="mt-10">
       <div className="flex items-center justify-between mb-4">
-        <PlatformHeading
-          title={title}
-          expandedPlatform={expandedPlatform}
-          onToggle={onToggleExpand}
-        />
+        <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
         <div className="flex items-center gap-2">
-          <button
-            onClick={onScrollLeft}
-            className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20"
-          >
+          <button onClick={onScrollLeft} className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20">
             ‹
           </button>
-          <button
-            onClick={onScrollRight}
-            className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20"
-          >
+          <button onClick={onScrollRight} className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20">
             ›
           </button>
         </div>
@@ -162,11 +120,7 @@ const HorizontalSection = ({
 const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand }) => (
   <section className="mt-10">
     <div className="mb-4">
-      <PlatformHeading
-        title={title}
-        expandedPlatform={expandedPlatform}
-        onToggle={onToggleExpand}
-      />
+      <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
     </div>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {videos.map((video, index) => (
@@ -185,16 +139,21 @@ function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [cursor, setCursor] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
   const [expandedPlatform, setExpandedPlatform] = useState(null);
+
+  const [videosByPlatform, setVideosByPlatform] = useState({ youtube: [], dailymotion: [] });
+  const [pagination, setPagination] = useState({
+    youtube: { cursor: null, hasMore: true, terminalReason: null },
+    dailymotion: { cursor: null, hasMore: true, terminalReason: null },
+  });
 
   const youtubeRailRef = useRef(null);
   const dailymotionRailRef = useRef(null);
-  const loadMoreAnchorRef = useRef(null);
+  const observer = useRef(null);
 
-  const mergeUniqueVideos = (existingVideos, incomingVideos) => {
+  const mergeUniqueVideos = useCallback((existingVideos, incomingVideos) => {
     const seen = new Set(existingVideos.map(video => getVideoKey(video)));
+
     const uniqueIncoming = incomingVideos.filter(video => {
       const key = getVideoKey(video);
       if (seen.has(key)) return false;
@@ -203,79 +162,119 @@ function Home() {
     });
 
     return [...existingVideos, ...uniqueIncoming];
-  };
+  }, []);
 
-  const fetchVideos = useCallback(async (searchQuery, cursorValue = null, isLoadMore = false) => {
-    if (!searchQuery || loading) return;
-    if (isLoadMore && !cursorValue) return;
+  const flattenByPlatform = useCallback(byPlatform => [...byPlatform.youtube, ...byPlatform.dailymotion], []);
 
-    setLoading(true);
-    setError(null);
+  const fetchPlatformVideos = useCallback(
+    async ({ searchQuery, platform, cursorValue = null, isLoadMore = false }) => {
+      if (!searchQuery || !platform) return;
+      if (isLoadMore && !cursorValue) return;
 
-    try {
-      const response = await ppi.get("/api/v1/videos/search", {
-        params: {
-          q: searchQuery,
-          cursor: cursorValue,
-          platform: "all",
-        },
-      });
+      setLoading(true);
+      setError(null);
 
-      const {
-        videos: newVideos,
-        nextCursor,
-        hasMore: moreAvailable,
-      } = response.data.data;
+      try {
+        const response = await ppi.get("/api/v1/videos/search", {
+          params: {
+            q: searchQuery,
+            cursor: cursorValue,
+            platform,
+            limit: PAGE_SIZE_PER_PLATFORM,
+          },
+        });
 
-      setVideos(previous => (isLoadMore ? mergeUniqueVideos(previous, newVideos) : newVideos));
-      setCursor(nextCursor);
-      setHasMore(moreAvailable);
-    } catch (requestError) {
-      console.error(requestError);
-      setError("Could not fetch videos. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [loading, setVideos]);
+        const { videos: newVideos, nextCursor, hasMore, terminalReasonByPlatform } = response.data.data;
 
-  const handleSearch = event => {
+        setVideosByPlatform(previous => {
+          const currentPlatformVideos = previous[platform] || [];
+          const updatedPlatformVideos = isLoadMore ? mergeUniqueVideos(currentPlatformVideos, newVideos) : newVideos;
+          const updatedState = { ...previous, [platform]: updatedPlatformVideos };
+          setVideos(flattenByPlatform(updatedState));
+          return updatedState;
+        });
+
+        setPagination(previous => ({
+          ...previous,
+          [platform]: {
+            cursor: nextCursor,
+            hasMore,
+            terminalReason: terminalReasonByPlatform?.[platform] || null,
+          },
+        }));
+      } catch (requestError) {
+        console.error(requestError);
+        setError("Could not fetch videos. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mergeUniqueVideos, setVideos, flattenByPlatform]
+  );
+
+  const handleSearch = async event => {
     event.preventDefault();
     const newQuery = event.target.elements.query.value.trim();
     if (!newQuery) return;
 
     setHasSearched(true);
     setQuery(newQuery);
-    setVideos([]);
-    setCursor(null);
-    setHasMore(true);
     setExpandedPlatform(null);
+    setVideos([]);
+    setVideosByPlatform({ youtube: [], dailymotion: [] });
+    setPagination({
+      youtube: { cursor: null, hasMore: true, terminalReason: null },
+      dailymotion: { cursor: null, hasMore: true, terminalReason: null },
+    });
 
-    fetchVideos(newQuery, null, false);
+    await Promise.all(
+      SUPPORTED_PLATFORMS.map(platform =>
+        fetchPlatformVideos({ searchQuery: newQuery, platform, cursorValue: null, isLoadMore: false })
+      )
+    );
   };
 
-  const observer = useRef();
+  const loadMoreExpandedVideos = useCallback(() => {
+    if (!expandedPlatform || !query || loading) return;
+
+    const platformState = pagination[expandedPlatform];
+    if (!platformState?.hasMore || !platformState?.cursor) return;
+
+    fetchPlatformVideos({
+      searchQuery: query,
+      platform: expandedPlatform,
+      cursorValue: platformState.cursor,
+      isLoadMore: true,
+    });
+  }, [expandedPlatform, query, loading, pagination, fetchPlatformVideos]);
+
   const loadMoreRef = useCallback(
     node => {
-      if (loading || !hasMore) return;
-      if (observer.current) observer.current.disconnect();
+      if (observer.current) {
+        observer.current.disconnect();
+      }
+
+      if (!node || !expandedPlatform || loading) return;
+
+      const platformState = pagination[expandedPlatform];
+      if (!platformState?.hasMore) return;
 
       observer.current = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting) {
-          fetchVideos(query, cursor, true);
+          loadMoreExpandedVideos();
         }
       });
 
-      if (node) observer.current.observe(node);
+      observer.current.observe(node);
     },
-    [loading, hasMore, query, cursor, fetchVideos]
+    [expandedPlatform, loading, pagination, loadMoreExpandedVideos]
   );
 
-  const groupedVideos = useMemo(
-    () => ({
-      youtube: videos.filter(video => video.platform === "youtube"),
-      dailymotion: videos.filter(video => video.platform === "dailymotion"),
-    }),
-    [videos]
+  useEffect(
+    () => () => {
+      observer.current?.disconnect();
+    },
+    []
   );
 
   const scrollRailBy = (railRef, delta) => {
@@ -285,12 +284,10 @@ function Home() {
 
   const toggleExpand = platform => {
     setExpandedPlatform(current => (current === platform ? null : platform));
-    setTimeout(() => {
-      loadMoreAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, 0);
   };
 
-
+  const hasAnyVideos = videos.length > 0;
+  const activePlatformState = expandedPlatform ? pagination[expandedPlatform] : null;
 
   if (authLoading) {
     return <div className="text-center py-10">Loading...</div>;
@@ -300,9 +297,7 @@ function Home() {
     <div className="min-h-screen font-sans p-4 sm:p-8">
       <header className="text-center my-8 sm:my-16">
         <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight">
-          <span className="bg-gradient-to-r from-purple-400 to-pink-600 text-transparent bg-clip-text">
-            Video Treasure
-          </span>
+          <span className="bg-gradient-to-r from-purple-400 to-pink-600 text-transparent bg-clip-text">Video Treasure</span>
         </h1>
       </header>
 
@@ -313,15 +308,15 @@ function Home() {
 
         {error && <p className="text-center text-red-400 mt-8">{error}</p>}
 
-        {!loading && !error && hasSearched && videos.length === 0 && (
+        {!loading && !error && hasSearched && !hasAnyVideos && (
           <p className="text-center text-white/50 mt-8">No videos found. Try a different search.</p>
         )}
 
-        {videos.length > 0 && expandedPlatform === null && (
+        {hasAnyVideos && expandedPlatform === null && (
           <>
             <HorizontalSection
               title="YouTube"
-              videos={groupedVideos.youtube}
+              videos={videosByPlatform.youtube}
               containerRef={youtubeRailRef}
               onScrollLeft={() => scrollRailBy(youtubeRailRef, -900)}
               onScrollRight={() => scrollRailBy(youtubeRailRef, 900)}
@@ -331,7 +326,7 @@ function Home() {
 
             <HorizontalSection
               title="Dailymotion"
-              videos={groupedVideos.dailymotion}
+              videos={videosByPlatform.dailymotion}
               containerRef={dailymotionRailRef}
               onScrollLeft={() => scrollRailBy(dailymotionRailRef, -900)}
               onScrollRight={() => scrollRailBy(dailymotionRailRef, 900)}
@@ -341,30 +336,31 @@ function Home() {
           </>
         )}
 
-        {videos.length > 0 && expandedPlatform === "youtube" && (
+        {hasAnyVideos && expandedPlatform === "youtube" && (
           <ExpandedGridSection
             title="YouTube"
-            videos={groupedVideos.youtube}
+            videos={videosByPlatform.youtube}
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("youtube")}
           />
         )}
 
-        {videos.length > 0 && expandedPlatform === "dailymotion" && (
+        {hasAnyVideos && expandedPlatform === "dailymotion" && (
           <ExpandedGridSection
             title="Dailymotion"
-            videos={groupedVideos.dailymotion}
+            videos={videosByPlatform.dailymotion}
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("dailymotion")}
           />
         )}
 
-        <div ref={loadMoreAnchorRef} className="h-6" />
-        <div ref={loadMoreRef} className="h-2" />
+        {expandedPlatform && <div ref={loadMoreRef} className="h-4" />}
 
-        {!loading && hasSearched && videos.length > 0 && !hasMore && (
+        {!loading && hasSearched && expandedPlatform && activePlatformState && !activePlatformState.hasMore && (
           <p className="text-center text-white/70 mt-8">
-            All videos are here.
+            {activePlatformState.terminalReason === "rate_limit_hit"
+              ? "API rate limit hit for this platform."
+              : "All videos are here."}
           </p>
         )}
       </main>

@@ -3,7 +3,8 @@ import { QueryState } from "../models/queryState.model.js";
 import { searchYouTube } from "../providers/youtube.provider.js";
 import { searchDailymotion } from "../providers/dailymotion.provider.js";
 
-const PAGE_SIZE = 12;
+const DEFAULT_PAGE_SIZE = 12;
+const MAX_PAGE_SIZE = 24;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
 const MAX_REFILL_CYCLES = 4;
 
@@ -37,6 +38,16 @@ const buildVideoFilter = (query, cursorDate, platformFilter) => ({
   ...(platformFilter !== "all" && { platform: platformFilter }),
   ...(cursorDate && { publishedAt: { $lt: cursorDate } }),
 });
+
+const normalizeLimit = rawLimit => {
+  const parsedLimit = Number.parseInt(rawLimit, 10);
+
+  if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) {
+    return DEFAULT_PAGE_SIZE;
+  }
+
+  return Math.min(parsedLimit, MAX_PAGE_SIZE);
+};
 
 const getPlatformsToSearch = platform => {
   if (!platform || platform === "all") return SUPPORTED_PLATFORMS;
@@ -114,13 +125,13 @@ const loadStatesByPlatform = async (query, platformsToSearch) => {
   return Object.fromEntries(stateEntries);
 };
 
-const refillFromApiUntilPageFilled = async ({ query, platform, cursorDate, platformsToSearch }) => {
+const refillFromApiUntilPageFilled = async ({ query, platform, cursorDate, platformsToSearch, pageSize }) => {
   let statesByPlatform = await loadStatesByPlatform(query, platformsToSearch);
 
   for (let refillCycle = 0; refillCycle < MAX_REFILL_CYCLES; refillCycle += 1) {
     const remainingInDb = await countRemainingDbVideos(query, platform, cursorDate);
 
-    if (remainingInDb >= PAGE_SIZE) {
+    if (remainingInDb >= pageSize) {
       break;
     }
 
@@ -141,24 +152,26 @@ const refillFromApiUntilPageFilled = async ({ query, platform, cursorDate, platf
   return statesByPlatform;
 };
 
-export const fetchVideosByQuery = async (query, cursor = null, platform = "all") => {
+export const fetchVideosByQuery = async (query, cursor = null, platform = "all", limit = DEFAULT_PAGE_SIZE) => {
+  const pageSize = normalizeLimit(limit);
   const cursorDate = cursor ? new Date(cursor) : null;
   const platformsToSearch = getPlatformsToSearch(platform);
   const filter = buildVideoFilter(query, cursorDate, platform);
 
-  let videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(PAGE_SIZE);
+  let videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(pageSize);
 
   let statesByPlatform = {};
 
-  if (videos.length < PAGE_SIZE) {
+  if (videos.length < pageSize) {
     statesByPlatform = await refillFromApiUntilPageFilled({
       query,
       platform,
       cursorDate,
       platformsToSearch,
+      pageSize,
     });
 
-    videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(PAGE_SIZE);
+    videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(pageSize);
   }
 
   const nextCursor = videos.length > 0 ? videos[videos.length - 1].publishedAt : null;
@@ -180,6 +193,10 @@ export const fetchVideosByQuery = async (query, cursor = null, platform = "all")
 
   const canStillFetchFromApi = platformsToSearch.some(currentPlatform => !freshStates[currentPlatform]?.exhausted);
   const hasMore = remainingAfterPage > 0 || canStillFetchFromApi;
+
+  console.log(
+    `ℹ️ [videos:${query}] pageSize=${pageSize} platform=${platform} returned=${videos.length} remainingInDb=${remainingAfterPage} canStillFetchFromApi=${canStillFetchFromApi} hasMore=${hasMore}`
+  );
 
   if (!hasMore) {
     const reasonText = Object.entries(terminalReasonByPlatform)

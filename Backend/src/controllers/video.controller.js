@@ -1,7 +1,7 @@
 import { fetchVideosByQuery } from "../services/videoFetch.service.js";
 
 const searchVideos = async (req, res) => {
-  const { q: query, cursor, platform = "all" } = req.query;
+  const { q: query, cursor, platform = "all", limit } = req.query;
 
   if (!query) {
     return res.status(400).json({ error: "Search query is required" });
@@ -9,7 +9,7 @@ const searchVideos = async (req, res) => {
 
   try {
     const { videos, byPlatform, nextCursor, hasMore, terminalReasonByPlatform } =
-      await fetchVideosByQuery(query, cursor, platform);
+      await fetchVideosByQuery(query, cursor, platform, limit);
 
     return res.status(200).json({
       data: {
