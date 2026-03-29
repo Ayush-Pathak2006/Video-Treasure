@@ -4,7 +4,9 @@ import Header from "../components/Header";
 import { useAuth, useSearch } from "../context/AppContext";
 import ppi from "../api/axios";
 
-const PAGE_SIZE_PER_PLATFORM = 4;
+const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
+const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
+const MINIMIZED_LOAD_MORE_PAGE_SIZE = 2;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
@@ -150,6 +152,7 @@ function Home() {
   const youtubeRailRef = useRef(null);
   const dailymotionRailRef = useRef(null);
   const observer = useRef(null);
+  const horizontalLoadInFlightRef = useRef({ youtube: false, dailymotion: false });
 
   const mergeUniqueVideos = useCallback((existingVideos, incomingVideos) => {
     const seen = new Set(existingVideos.map(video => getVideoKey(video)));
@@ -167,7 +170,7 @@ function Home() {
   const flattenByPlatform = useCallback(byPlatform => [...byPlatform.youtube, ...byPlatform.dailymotion], []);
 
   const fetchPlatformVideos = useCallback(
-    async ({ searchQuery, platform, cursorValue = null, isLoadMore = false }) => {
+    async ({ searchQuery, platform, cursorValue = null, isLoadMore = false, limit = INITIAL_PAGE_SIZE_PER_PLATFORM }) => {
       if (!searchQuery || !platform) return;
       if (isLoadMore && !cursorValue) return;
 
@@ -180,7 +183,7 @@ function Home() {
             q: searchQuery,
             cursor: cursorValue,
             platform,
-            limit: PAGE_SIZE_PER_PLATFORM,
+            limit,
           },
         });
 
@@ -245,8 +248,32 @@ function Home() {
       platform: expandedPlatform,
       cursorValue: platformState.cursor,
       isLoadMore: true,
+      limit: EXPANDED_PAGE_SIZE_PER_PLATFORM,
     });
   }, [expandedPlatform, query, loading, pagination, fetchPlatformVideos]);
+
+  const loadMoreHorizontalVideos = useCallback(
+    platform => {
+      if (!query || expandedPlatform !== null || loading) return;
+
+      const platformState = pagination[platform];
+      if (!platformState?.hasMore || !platformState?.cursor) return;
+      if (horizontalLoadInFlightRef.current[platform]) return;
+
+      horizontalLoadInFlightRef.current[platform] = true;
+
+      fetchPlatformVideos({
+        searchQuery: query,
+        platform,
+        cursorValue: platformState.cursor,
+        isLoadMore: true,
+        limit: MINIMIZED_LOAD_MORE_PAGE_SIZE,
+      }).finally(() => {
+        horizontalLoadInFlightRef.current[platform] = false;
+      });
+    },
+    [expandedPlatform, fetchPlatformVideos, loading, pagination, query]
+  );
 
   const loadMoreRef = useCallback(
     node => {
@@ -276,6 +303,33 @@ function Home() {
     },
     []
   );
+
+  useEffect(() => {
+    if (expandedPlatform !== null) return;
+
+    const registerHorizontalInfiniteScroll = (railRef, platform) => {
+      const railElement = railRef.current;
+      if (!railElement) return () => {};
+
+      const onScroll = () => {
+        const distanceFromEnd = railElement.scrollWidth - (railElement.scrollLeft + railElement.clientWidth);
+        if (distanceFromEnd <= 120) {
+          loadMoreHorizontalVideos(platform);
+        }
+      };
+
+      railElement.addEventListener("scroll", onScroll);
+      return () => railElement.removeEventListener("scroll", onScroll);
+    };
+
+    const removeYoutubeListener = registerHorizontalInfiniteScroll(youtubeRailRef, "youtube");
+    const removeDailymotionListener = registerHorizontalInfiniteScroll(dailymotionRailRef, "dailymotion");
+
+    return () => {
+      removeYoutubeListener();
+      removeDailymotionListener();
+    };
+  }, [expandedPlatform, loadMoreHorizontalVideos, videosByPlatform.youtube.length, videosByPlatform.dailymotion.length]);
 
   const scrollRailBy = (railRef, delta) => {
     if (!railRef.current) return;
