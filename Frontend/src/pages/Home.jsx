@@ -11,20 +11,23 @@ const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
 
-const SearchBar = ({ onSearch, loading }) => (
+const SearchBar = ({ onSearch, loading, searchInput, onSearchInputChange }) => (
   <form onSubmit={onSearch} className="w-full max-w-2xl mx-auto">
     <div className="relative">
       <input
         type="search"
         name="query"
+        value={searchInput}
+        onChange={onSearchInputChange}
         disabled={loading}
         placeholder="Search for any video..."
-        className="w-full p-4 pr-12 text-lg text-white bg-white/10 rounded-full border border-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500 backdrop-blur-sm transition-all duration-300 disabled:opacity-50"
+        className="w-full appearance-none p-4 pr-12 text-lg text-white placeholder:text-white/60 bg-white/10 rounded-full border border-white/20 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-purple-500 backdrop-blur-sm transition-all duration-300 disabled:opacity-50"
       />
       <button
         type="submit"
         disabled={loading}
-        className="absolute top-1/2 right-4 -translate-y-1/2 text-white/50 hover:text-white transition-colors"
+        className="absolute top-1/2 right-4 -translate-y-1/2 text-purple-200 hover:text-white transition-colors z-10"
+        aria-label="Search"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -142,6 +145,7 @@ function Home() {
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [expandedPlatform, setExpandedPlatform] = useState(null);
+  const [searchInput, setSearchInput] = useState("");
 
   const [videosByPlatform, setVideosByPlatform] = useState({ youtube: [], dailymotion: [] });
   const [pagination, setPagination] = useState({
@@ -217,7 +221,7 @@ function Home() {
 
   const handleSearch = async event => {
     event.preventDefault();
-    const newQuery = event.target.elements.query.value.trim();
+    const newQuery = searchInput.trim();
     if (!newQuery) return;
 
     setHasSearched(true);
@@ -358,7 +362,12 @@ function Home() {
       <Header />
 
       <main>
-        <SearchBar onSearch={handleSearch} loading={loading} />
+        <SearchBar
+          onSearch={handleSearch}
+          loading={loading}
+          searchInput={searchInput}
+          onSearchInputChange={event => setSearchInput(event.target.value)}
+        />
 
         {error && <p className="text-center text-red-400 mt-8">{error}</p>}
 
