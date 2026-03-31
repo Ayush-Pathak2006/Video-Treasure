@@ -21,6 +21,37 @@ const registerUser = asyncHandler(async (req, res) => {
   // 2️⃣ Check if user already exists
   const existedUser = await User.findOne({ $or: [{ username }, { email }] });
   if (existedUser) {
+    // If the existing account is local and still unverified, re-send verification email
+    // instead of forcing the user to create another account.
+    if (
+      existedUser.authProvider === "local" &&
+      !existedUser.isEmailVerified &&
+      existedUser.email === email
+    ) {
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const hashedToken = crypto
+        .createHash("sha256")
+        .update(verificationToken)
+        .digest("hex");
+
+      existedUser.emailVerificationToken = hashedToken;
+      existedUser.emailVerificationExpiry = Date.now() + 15 * 60 * 1000;
+      await existedUser.save({ validateBeforeSave: false });
+
+      const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+      await sendVerificationEmail(existedUser.email, verificationUrl);
+
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            {},
+            "Account already exists but is not verified. We sent a new verification email.",
+          ),
+        );
+    }
+
     throw new ApiError(409, "User with email or username already exists");
   }
 
@@ -52,8 +83,17 @@ const registerUser = asyncHandler(async (req, res) => {
   // 7️⃣ Build verification URL (frontend route)
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-  // 8️⃣ Send verification email (placeholder)
-  await sendVerificationEmail(user.email, verificationUrl);
+  // 8️⃣ Send verification email
+  try {
+    await sendVerificationEmail(user.email, verificationUrl);
+  } catch (emailError) {
+    // Roll back created user if we fail to send verification email.
+    await User.findByIdAndDelete(user._id);
+    throw new ApiError(
+      500,
+      "Unable to send verification email right now. Please try again shortly.",
+    );
+  }
 
   // 9️⃣ Respond (NO login here)
   return res
