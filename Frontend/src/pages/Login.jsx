@@ -130,7 +130,7 @@ function Login() {
         )}
 
         <a
-          href="http://localhost:8000/api/v1/auth/google"
+          href="https://video-treasure-backend.onrender.com/api/v1/auth/google"
           className="w-full py-2 mt-4 flex justify-center items-center border border-white/20 rounded-md text-white hover:bg-white/10"
         >
           Continue with Google
