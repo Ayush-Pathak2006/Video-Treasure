@@ -42,6 +42,22 @@ const videoSchema = new Schema(
       index: true,
     },
 
+    views: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+
+    likes: {
+      type: Number,
+      default: 0,
+    },
+
+    score: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
 
     fetchedAt: {
       type: Date,

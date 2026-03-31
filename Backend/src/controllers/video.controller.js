@@ -1,5 +1,5 @@
 import { fetchVideosByQuery } from "../services/videoFetch.service.js";
-
+import { resolveSearchIntent } from "../utils/nicheResolver.js";
 const searchVideos = async (req, res) => {
   const { q: query, cursor, platform = "all", limit } = req.query;
 
@@ -8,8 +8,15 @@ const searchVideos = async (req, res) => {
   }
 
   try {
-    const { videos, byPlatform, nextCursor, hasMore, terminalReasonByPlatform } =
-      await fetchVideosByQuery(query, cursor, platform, limit);
+    const intent = resolveSearchIntent(query);
+
+    const { videos, byPlatform, nextCursor, hasMore, terminalReasonByPlatform } = await fetchVideosByQuery({
+      query: intent.dbQuery,
+      cursor,
+      platform,
+      limit,
+      providerQuery: intent.providerQuery,
+    });
 
     return res.status(200).json({
       data: {
@@ -18,6 +25,7 @@ const searchVideos = async (req, res) => {
         nextCursor,
         hasMore,
         terminalReasonByPlatform,
+        matchedNiche: intent.niche,
       },
     });
   } catch (error) {

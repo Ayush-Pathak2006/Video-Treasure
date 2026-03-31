@@ -36,14 +36,14 @@ const getDailymotionToken = async () => {
   return cachedToken;
 };
 
-export const searchDailymotion = async (query, page = null) => {
+export const searchDailymotion = async (query, page = null, options = {}) => {
   const pageNumber = page ? Number(page) : 1;
   const token = await getDailymotionToken();
   const params = {
     search: query,
-    limit: PAGE_SIZE,
+    limit: options.maxResults || PAGE_SIZE,
     page: pageNumber,
-    fields: "id,title,description,thumbnail_url,created_time,channel",
+    fields: "id,title,description,thumbnail_url,created_time,channel,views_total,likes_total",
   };
 
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -59,10 +59,12 @@ export const searchDailymotion = async (query, page = null) => {
     thumbnail: item.thumbnail_url,
     channelTitle: item.channel || "Dailymotion",
     publishedAt: new Date(item.created_time * 1000),
+    views: Number(item.views_total) || 0,
+    likes: Number(item.likes_total) || 0,
   }));
 
   const hasExplicitMore = Boolean(response.data.has_more);
-  const hasNextBySize = list.length === PAGE_SIZE;
+  const hasNextBySize = list.length === (options.maxResults || PAGE_SIZE);
 
   return {
     videos,
