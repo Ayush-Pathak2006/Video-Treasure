@@ -7,7 +7,13 @@ export const resolveSearchIntent = rawQuery => {
 
   const matchedNiche = NICHE_TOPICS.find(niche => {
     const nicheName = normalize(niche.name);
-    return nicheName === input || input.includes(nicheName);
+    const aliases = Array.isArray(niche.aliases) ? niche.aliases.map(normalize) : [];
+
+    if (nicheName === input || input.includes(nicheName)) {
+      return true;
+    }
+
+    return aliases.some(alias => alias && (alias === input || input.includes(alias)));
   });
 
   if (!matchedNiche) {
