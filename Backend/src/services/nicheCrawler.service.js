@@ -2,6 +2,11 @@ import { Video } from "../models/video.model.js";
 import { NICHE_TOPICS, getCombinedNicheQuery } from "../config/niches.config.js";
 import { PROVIDERS, SUPPORTED_PLATFORMS } from "../providers/provider.registry.js";
 import { rankVideos } from "../utils/videoRanking.js";
+import {
+  getCrawlerMinRemainingPercent,
+  getQuotaSnapshot,
+  isCrawlerQuotaGuardActive,
+} from "../utils/quotaTracker.js";
 
 const FETCH_PER_NICHE = 4;
 const CANDIDATES_PER_PROVIDER = 24;
@@ -10,9 +15,27 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 const crawlAllNichesOnce = async () => {
   console.log("🕐 Running hourly niche crawler...");
 
+  const startingQuota = getQuotaSnapshot();
+  const minimumRemainingPercent = getCrawlerMinRemainingPercent();
+
+  if (isCrawlerQuotaGuardActive()) {
+    console.log(
+      `🛑 [crawler] skipped run because remaining daily quota is ${startingQuota.remainingPercent.toFixed(2)}%, below threshold ${minimumRemainingPercent.toFixed(2)}%.`
+    );
+    return;
+  }
+
   for (const niche of NICHE_TOPICS) {
     const nicheName = niche.name;
     const providerQuery = getCombinedNicheQuery(niche);
+
+    if (isCrawlerQuotaGuardActive()) {
+      const quotaSnapshot = getQuotaSnapshot();
+      console.log(
+        `🛑 [crawler:${nicheName}] stopping run because remaining daily quota is ${quotaSnapshot.remainingPercent.toFixed(2)}%, below threshold ${minimumRemainingPercent.toFixed(2)}%.`
+      );
+      break;
+    }
 
     try {
       const providerCalls = SUPPORTED_PLATFORMS.map(platform =>

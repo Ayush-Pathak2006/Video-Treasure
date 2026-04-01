@@ -1,8 +1,18 @@
 import axios from "axios";
+import { canConsumeQuotaUnits, consumeQuotaUnits } from "../utils/quotaTracker.js";
 
 const YOUTUBE_SEARCH_API = "https://www.googleapis.com/youtube/v3/search";
 
 const YOUTUBE_VIDEOS_API = "https://www.googleapis.com/youtube/v3/videos";
+
+const YOUTUBE_SEARCH_COST_UNITS = 100;
+const YOUTUBE_VIDEOS_COST_UNITS = 1;
+
+const buildQuotaError = () => {
+  const error = new Error("YouTube quota budget reserved for users.");
+  error.response = { status: 429 };
+  return error;
+};
 
 const getStatisticsMap = async videoIds => {
   if (!videoIds.length) {
@@ -41,16 +51,33 @@ export const searchYouTube = async (query, pageToken = null, options = {}) => {
 
   if (pageToken) params.pageToken = pageToken;
 
+  const estimatedUnits = YOUTUBE_SEARCH_COST_UNITS + YOUTUBE_VIDEOS_COST_UNITS;
+
+  if (!canConsumeQuotaUnits(estimatedUnits)) {
+    throw buildQuotaError();
+  }
+
+  consumeQuotaUnits({ units: YOUTUBE_SEARCH_COST_UNITS, reason: "youtube.search" });
   const response = await axios.get(YOUTUBE_SEARCH_API, { params });
   const items = response.data.items || [];
   const videoIds = items.map(item => item.id.videoId).filter(Boolean);
-  const statsMap = await getStatisticsMap(videoIds);
+
+  let statsMap = new Map();
+
+  if (videoIds.length > 0) {
+    if (!canConsumeQuotaUnits(YOUTUBE_VIDEOS_COST_UNITS)) {
+      throw buildQuotaError();
+    }
+
+    consumeQuotaUnits({ units: YOUTUBE_VIDEOS_COST_UNITS, reason: "youtube.videos.statistics" });
+    statsMap = await getStatisticsMap(videoIds);
+  }
 
   const videos = items.map(item => {
     const id = item.id.videoId;
     const stats = statsMap.get(id) || { views: 0, likes: 0 };
 
-  return {
+    return {
       platform: "youtube",
       platformVideoId: id,
       query,
