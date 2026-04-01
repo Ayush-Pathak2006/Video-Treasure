@@ -6,6 +6,12 @@ This project is designed as a **production-style system**, emphasizing authentic
 
 ---
 
+## 🚀 Live Demo
+
+🌐 **Live Website:** *[https://video-treasure.vercel.app/]*   
+
+---
+
 ## 🚀 Problem Statement
 
 Users often need to search the same topic across multiple video platforms, leading to fragmented results, duplicated effort, and poor user experience.  
