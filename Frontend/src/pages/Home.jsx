@@ -8,6 +8,7 @@ const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
 const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
 const MINIMIZED_LOAD_MORE_PAGE_SIZE = 2;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
+const INFINITE_SCROLL_RATE_LIMIT_MS = 1200;
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
 
@@ -180,6 +181,29 @@ function Home() {
   const dailymotionRailRef = useRef(null);
   const observer = useRef(null);
   const horizontalLoadInFlightRef = useRef({ youtube: false, dailymotion: false });
+  const lastLoadMoreAtRef = useRef({
+    youtube: 0,
+    dailymotion: 0,
+  });
+
+  const resetLoadMoreRateLimit = useCallback(() => {
+    lastLoadMoreAtRef.current = {
+      youtube: 0,
+      dailymotion: 0,
+    };
+  }, []);
+
+  const canTriggerLoadMore = useCallback(platform => {
+    const now = Date.now();
+    const lastRequestedAt = lastLoadMoreAtRef.current[platform] || 0;
+
+    if (now - lastRequestedAt < INFINITE_SCROLL_RATE_LIMIT_MS) {
+      return false;
+    }
+
+    lastLoadMoreAtRef.current[platform] = now;
+    return true;
+  }, []);
 
   const mergeUniqueVideos = useCallback((existingVideos, incomingVideos) => {
     const seen = new Set(existingVideos.map(video => getVideoKey(video)));
@@ -242,33 +266,38 @@ function Home() {
     [mergeUniqueVideos, setVideos, flattenByPlatform]
   );
 
-  const handleSearch = async event => {
-    event.preventDefault();
-    const newQuery = searchInput.trim();
-    if (!newQuery) return;
+  const handleSearch = useCallback(
+    async event => {
+      event.preventDefault();
+      const newQuery = searchInput.trim();
+      if (!newQuery) return;
 
-    setHasSearched(true);
-    setQuery(newQuery);
-    setExpandedPlatform(null);
-    setVideos([]);
-    setVideosByPlatform({ youtube: [], dailymotion: [] });
-    setPagination({
-      youtube: { cursor: null, hasMore: true, terminalReason: null },
-      dailymotion: { cursor: null, hasMore: true, terminalReason: null },
-    });
+      setHasSearched(true);
+      setQuery(newQuery);
+      setExpandedPlatform(null);
+      setVideos([]);
+      setVideosByPlatform({ youtube: [], dailymotion: [] });
+      setPagination({
+        youtube: { cursor: null, hasMore: true, terminalReason: null },
+        dailymotion: { cursor: null, hasMore: true, terminalReason: null },
+      });
+      resetLoadMoreRateLimit();
 
-    await Promise.all(
-      SUPPORTED_PLATFORMS.map(platform =>
-        fetchPlatformVideos({ searchQuery: newQuery, platform, cursorValue: null, isLoadMore: false })
-      )
-    );
-  };
+      await Promise.all(
+        SUPPORTED_PLATFORMS.map(platform =>
+          fetchPlatformVideos({ searchQuery: newQuery, platform, cursorValue: null, isLoadMore: false })
+        )
+      );
+    },
+    [fetchPlatformVideos, resetLoadMoreRateLimit, setQuery, setVideos, searchInput]
+  );
 
   const loadMoreExpandedVideos = useCallback(() => {
     if (!expandedPlatform || !query || loading) return;
 
     const platformState = pagination[expandedPlatform];
     if (!platformState?.hasMore || !platformState?.cursor) return;
+    if (!canTriggerLoadMore(expandedPlatform)) return;
 
     fetchPlatformVideos({
       searchQuery: query,
@@ -277,7 +306,7 @@ function Home() {
       isLoadMore: true,
       limit: EXPANDED_PAGE_SIZE_PER_PLATFORM,
     });
-  }, [expandedPlatform, query, loading, pagination, fetchPlatformVideos]);
+  }, [canTriggerLoadMore, expandedPlatform, query, loading, pagination, fetchPlatformVideos]);
 
   const loadMoreHorizontalVideos = useCallback(
     platform => {
@@ -286,6 +315,7 @@ function Home() {
       const platformState = pagination[platform];
       if (!platformState?.hasMore || !platformState?.cursor) return;
       if (horizontalLoadInFlightRef.current[platform]) return;
+      if (!canTriggerLoadMore(platform)) return;
 
       horizontalLoadInFlightRef.current[platform] = true;
 
@@ -299,7 +329,7 @@ function Home() {
         horizontalLoadInFlightRef.current[platform] = false;
       });
     },
-    [expandedPlatform, fetchPlatformVideos, loading, pagination, query]
+    [canTriggerLoadMore, expandedPlatform, fetchPlatformVideos, loading, pagination, query]
   );
 
   const loadMoreRef = useCallback(
@@ -364,6 +394,7 @@ function Home() {
   };
 
   const toggleExpand = platform => {
+    resetLoadMoreRateLimit();
     setExpandedPlatform(current => (current === platform ? null : platform));
   };
 
