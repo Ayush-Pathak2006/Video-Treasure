@@ -45,8 +45,13 @@ function Player() {
   };
 
   const handleBack = () => {
-    if (location.state?.from) {
-      navigate(-1);
+    if (location.state?.from?.pathname) {
+      navigate(`${location.state.from.pathname}${location.state.from.search || ""}`, {
+        state: {
+          restoreQuery: location.state?.searchQuery || "",
+          restoreHasSearched: Boolean(location.state?.hasSearched),
+        },
+      });
       return;
     }
 
@@ -68,7 +73,7 @@ function Player() {
             allowFullScreen
           ></iframe>
         </div>
-        
+
         {/* Back to Home Button */}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <button
