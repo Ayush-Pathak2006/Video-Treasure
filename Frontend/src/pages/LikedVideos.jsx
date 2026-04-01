@@ -61,7 +61,7 @@ function LikedVideos() {
   };
 
   return (
-    <div className="min-h-screen font-sans p-4 sm:p-8 pt-24">
+    <div className="min-h-screen font-sans p-4 pt-24 sm:p-8 sm:pt-28">
       <Header />
       <main>
         <h1 className="text-3xl font-bold mb-8">My Liked Videos</h1>

@@ -375,7 +375,7 @@ function Home() {
   }
 
   return (
-    <div className="min-h-screen font-sans p-4 sm:p-8">
+    <div className="min-h-screen font-sans p-4 pt-24 sm:p-8 sm:pt-28">
       <header className="text-center my-8 sm:my-16">
         <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight">
           <span className="bg-gradient-to-r from-purple-400 to-pink-600 text-transparent bg-clip-text">Video Treasure</span>

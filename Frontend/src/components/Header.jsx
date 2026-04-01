@@ -7,8 +7,8 @@ function Header() {
     const [isOpen, setIsOpen] = useState(false); // State for mobile menu
 
     return (
-        <header className="absolute top-0 left-0 right-0 p-4 bg-gray-900/30 backdrop-blur-sm z-10">
-            <div className="container mx-auto flex justify-between items-center">
+        <header className="fixed top-0 left-0 right-0 p-4 bg-gray-900/30 backdrop-blur-sm z-50">
+            <div className="container mx-auto flex justify-between items-center min-h-10">
                 <Link to="/" className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 text-transparent bg-clip-text">
                     Video Treasure
                 </Link>
