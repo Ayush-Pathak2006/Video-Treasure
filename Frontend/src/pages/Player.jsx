@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useAuth, useSearch } from "../context/AppContext";
 
 const buildEmbedUrl = (platform, id) => {
@@ -12,8 +12,6 @@ const buildEmbedUrl = (platform, id) => {
 
 function Player() {
   const { platform = "youtube", id } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
   const { user, likedVideoIds, toggleLike } = useAuth();
   const { videos } = useSearch();
   const embedUrl = buildEmbedUrl(platform, id);
@@ -44,15 +42,6 @@ function Player() {
     toggleLike(videoForLike);
   };
 
-  const handleBack = () => {
-    if (location.state?.from) {
-      navigate(-1);
-      return;
-    }
-
-    navigate("/");
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-4xl">
@@ -71,13 +60,12 @@ function Player() {
         
         {/* Back to Home Button */}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={handleBack}
+          <Link
+            to="/"
             className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-full transition-all duration-300"
           >
             ← Back to Search
-          </button>
+          </Link>
           <button
             onClick={handleLike}
             className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-6 rounded-full transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
