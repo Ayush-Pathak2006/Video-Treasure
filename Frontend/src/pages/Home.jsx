@@ -8,8 +8,7 @@ const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
 const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
 const MINIMIZED_LOAD_MORE_PAGE_SIZE = 2;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
-const DEFAULT_TRENDING_QUERY = "trending videos";
-const DEFAULT_YOUTUBE_FALLBACK_QUERY = "youtube trending";
+const DEFAULT_TRENDING_QUERY = "trending";
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
 
@@ -39,7 +38,7 @@ const SearchBar = ({ onSearch, loading, searchInput, onSearchInputChange }) => (
   </form>
 );
 
-const VideoCard = ({ video, fullWidth = false, fromLocation, searchQuery, hasSearched }) => {
+const VideoCard = ({ video, fullWidth = false, fromLocation }) => {
   const { user, likedVideoIds, toggleLike } = useAuth();
   const videoKey = getVideoKey(video);
   const isLiked = likedVideoIds.has(videoKey);
@@ -60,15 +59,7 @@ const VideoCard = ({ video, fullWidth = false, fromLocation, searchQuery, hasSea
     <div
       className={`bg-white/5 p-4 rounded-xl border border-white/10 shadow-lg group transform hover:-translate-y-1 transition-all duration-300 cursor-pointer relative ${fullWidth ? "w-full" : "min-w-[320px] max-w-[320px]"}`}
     >
-      <Link
-        to={`/watch/${video.platform}/${video.platformVideoId}`}
-        state={{
-          from: { pathname: fromLocation.pathname, search: fromLocation.search },
-          searchQuery,
-          hasSearched,
-        }}
-        className="block"
-      >
+      <Link to={`/watch/${video.platform}/${video.platformVideoId}`} state={{ from: fromLocation }} className="block">
         <div className="relative mb-4 aspect-video rounded-lg overflow-hidden">
           <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
           <span className="absolute top-2 left-2 text-xs px-2 py-1 rounded-full bg-black/70 uppercase">{video.platform}</span>
@@ -129,18 +120,7 @@ const PlatformHeading = ({ title, expandedPlatform, onToggle }) => {
   );
 };
 
-const HorizontalSection = ({
-  title,
-  videos,
-  containerRef,
-  onScrollLeft,
-  onScrollRight,
-  expandedPlatform,
-  onToggleExpand,
-  fromLocation,
-  searchQuery,
-  hasSearched,
-}) => {
+const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScrollRight, expandedPlatform, onToggleExpand, fromLocation }) => {
   if (!videos.length) return null;
 
   return (
@@ -159,20 +139,14 @@ const HorizontalSection = ({
 
       <div ref={containerRef} className="flex gap-4 overflow-x-auto pb-3 scroll-smooth hide-scrollbar">
         {videos.map((video, index) => (
-          <VideoCard
-            key={`${getVideoKey(video)}-${index}`}
-            video={video}
-            fromLocation={fromLocation}
-            searchQuery={searchQuery}
-            hasSearched={hasSearched}
-          />
+          <VideoCard key={`${getVideoKey(video)}-${index}`} video={video} fromLocation={fromLocation} />
         ))}
       </div>
     </section>
   );
 };
 
-const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand, fromLocation, searchQuery, hasSearched }) => (
+const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand, fromLocation }) => (
   <section className="mt-10">
     <div className="mb-4">
       <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
@@ -180,13 +154,7 @@ const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand, 
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {videos.map((video, index) => (
         <div key={`${getVideoKey(video)}-${index}`} className="min-w-0">
-          <VideoCard
-            video={video}
-            fullWidth
-            fromLocation={fromLocation}
-            searchQuery={searchQuery}
-            hasSearched={hasSearched}
-          />
+          <VideoCard video={video} fullWidth fromLocation={fromLocation} />
         </div>
       ))}
     </div>
@@ -202,7 +170,7 @@ function Home() {
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [expandedPlatform, setExpandedPlatform] = useState(null);
-  const [searchInput, setSearchInput] = useState(query || "");
+  const [searchInput, setSearchInput] = useState("");
 
   const [videosByPlatform, setVideosByPlatform] = useState({ youtube: [], dailymotion: [] });
   const [pagination, setPagination] = useState({
@@ -266,12 +234,9 @@ function Home() {
             terminalReason: terminalReasonByPlatform?.[platform] || null,
           },
         }));
-
-        return newVideos;
       } catch (requestError) {
         console.error(requestError);
         setError("Could not fetch videos. Please try again.");
-        return [];
       } finally {
         setLoading(false);
       }
@@ -291,20 +256,11 @@ function Home() {
         dailymotion: { cursor: null, hasMore: true, terminalReason: null },
       });
 
-      const searchResults = await Promise.all(
+      await Promise.all(
         SUPPORTED_PLATFORMS.map(platform =>
           fetchPlatformVideos({ searchQuery, platform, cursorValue: null, isLoadMore: false })
         )
       );
-
-      if (!markAsSearched && (!searchResults[0] || searchResults[0].length === 0)) {
-        await fetchPlatformVideos({
-          searchQuery: DEFAULT_YOUTUBE_FALLBACK_QUERY,
-          platform: "youtube",
-          cursorValue: null,
-          isLoadMore: false,
-        });
-      }
     },
     [fetchPlatformVideos, setQuery, setVideos]
   );
@@ -393,17 +349,6 @@ function Home() {
   }, [hasSearched, videos.length, loading, searchAcrossPlatforms]);
 
   useEffect(() => {
-    const restoreQuery = location.state?.restoreQuery;
-    if (typeof restoreQuery !== "string" || !restoreQuery.trim()) return;
-
-    setSearchInput(restoreQuery);
-    setHasSearched(Boolean(location.state?.restoreHasSearched));
-    if (query !== restoreQuery) {
-      setQuery(restoreQuery);
-    }
-  }, [location.state, query, setQuery]);
-
-  useEffect(() => {
     if (expandedPlatform !== null) return;
 
     const registerHorizontalInfiniteScroll = (railRef, platform) => {
@@ -481,8 +426,6 @@ function Home() {
               expandedPlatform={expandedPlatform}
               onToggleExpand={() => toggleExpand("youtube")}
               fromLocation={location}
-              searchQuery={query}
-              hasSearched={hasSearched}
             />
 
             <HorizontalSection
@@ -494,8 +437,6 @@ function Home() {
               expandedPlatform={expandedPlatform}
               onToggleExpand={() => toggleExpand("dailymotion")}
               fromLocation={location}
-              searchQuery={query}
-              hasSearched={hasSearched}
             />
           </>
         )}
@@ -507,8 +448,6 @@ function Home() {
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("youtube")}
             fromLocation={location}
-            searchQuery={query}
-            hasSearched={hasSearched}
           />
         )}
 
@@ -519,8 +458,6 @@ function Home() {
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("dailymotion")}
             fromLocation={location}
-            searchQuery={query}
-            hasSearched={hasSearched}
           />
         )}
 
