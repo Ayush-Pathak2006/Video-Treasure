@@ -127,7 +127,7 @@ export const AppProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={authValue}>
       <SearchContext.Provider value={searchValue}>
-        {!authLoading && children}
+        {children}
       </SearchContext.Provider>
     </AuthContext.Provider>
   );
