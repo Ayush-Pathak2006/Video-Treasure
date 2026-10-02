@@ -6,6 +6,11 @@ const DEFAULT_PAGE_SIZE = 12;
 const MAX_PAGE_SIZE = 24;
 const MAX_REFILL_CYCLES = 4;
 
+// A query/platform exhausted by a temporary problem (quota, rate limit, access denied) may call the API
+// again after this cooldown. "all_videos_accessed" is permanent: the provider has no more pages.
+const TEMPORARY_EXHAUSTION_REASONS = new Set(["rate_limit_hit", "api_access_denied"]);
+const EXHAUSTION_RETRY_COOLDOWN_MS = 60 * 60 * 1000;
+
 
 const mapProviderErrorToReason = error => {
   const status = error?.response?.status;
@@ -51,12 +56,42 @@ const getPlatformsToSearch = platform => {
   return [platform];
 };
 
-const getOrCreateQueryState = async (query, platform) =>
-  QueryState.findOneAndUpdate(
+const markExhausted = (state, reason) => {
+  state.exhausted = true;
+  state.exhaustedReason = reason;
+  state.exhaustedAt = new Date();
+};
+
+const reopenIfCooldownPassed = async state => {
+  if (!state.exhausted || !TEMPORARY_EXHAUSTION_REASONS.has(state.exhaustedReason)) {
+    return state;
+  }
+
+  // States exhausted before `exhaustedAt` existed have no timestamp, so they reopen right away.
+  const exhaustedForMs = state.exhaustedAt ? Date.now() - state.exhaustedAt.getTime() : Infinity;
+
+  if (exhaustedForMs < EXHAUSTION_RETRY_COOLDOWN_MS) {
+    return state;
+  }
+
+  state.exhausted = false;
+  state.exhaustedReason = null;
+  state.exhaustedAt = null;
+  await state.save();
+  console.log(`🔁 [videos:${state.query}] ${PROVIDERS[state.platform].name}: cooldown passed, API calls allowed again.`);
+
+  return state;
+};
+
+const getOrCreateQueryState = async (query, platform) => {
+  const state = await QueryState.findOneAndUpdate(
     { query, platform },
-    { $setOnInsert: { query, platform, exhausted: false, exhaustedReason: null, nextPageToken: null } },
+    { $setOnInsert: { query, platform, exhausted: false, exhaustedReason: null, exhaustedAt: null, nextPageToken: null } },
     { upsert: true, new: true }
   );
+
+  return reopenIfCooldownPassed(state);
+};
 
 const refillVideosFromApi = async ({ dbQuery, providerQuery, platform, state }) => {
   const provider = PROVIDERS[platform];
@@ -77,16 +112,14 @@ const refillVideosFromApi = async ({ dbQuery, providerQuery, platform, state }) 
       state.nextPageToken = nextPageToken;
       console.log(`📡 [videos:${dbQuery}] ${provider.name}: fetched ${apiVideos.length} videos from API and cached in DB.`);
     } else {
-      state.exhausted = true;
-      state.exhaustedReason = "all_videos_accessed";
+      markExhausted(state, "all_videos_accessed");
       console.log(`🛑 [videos:${dbQuery}] ${provider.name}: all videos for this topic are fetched from API.`);
     }
   } catch (error) {
     const providerError = mapProviderErrorToReason(error);
 
     if (providerError) {
-      state.exhausted = true;
-      state.exhaustedReason = providerError.exhaustedReason;
+      markExhausted(state, providerError.exhaustedReason);
       console.log(`⚠️ [videos:${dbQuery}] ${provider.name}: ${providerError.logMessage}`);
     } else {
       throw error;

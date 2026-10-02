@@ -7,7 +7,12 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "https://video-treasure-backend.onrender.com/api/v1/auth/google/callback"
+      // Relative URL: passport prefixes the protocol + host of the incoming request, so the same code
+      // gives http://localhost:8000/... locally and https://<render host>/... in production.
+      // `proxy: true` trusts Render's X-Forwarded-Proto header so production URLs use https.
+      // Every resulting URL must be listed under "Authorized redirect URIs" in Google Cloud Console.
+      callbackURL: "/api/v1/auth/google/callback",
+      proxy: true,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {

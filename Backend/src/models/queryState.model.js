@@ -25,6 +25,11 @@ const queryStateSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // When it was marked exhausted. Temporary reasons are retried after a cooldown (see videoFetch.service.js).
+    exhaustedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

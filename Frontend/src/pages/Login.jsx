@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AppContext";
-import ppi from "../api/axios";
+import ppi, { API_BASE_URL } from "../api/axios";
 
 function Login() {
   const navigate = useNavigate();
@@ -130,7 +130,7 @@ function Login() {
         )}
 
         <a
-          href="https://video-treasure-backend.onrender.com/api/v1/auth/google"
+          href={`${API_BASE_URL}/api/v1/auth/google`}
           className="w-full py-2 mt-4 flex justify-center items-center border border-white/20 rounded-md text-white hover:bg-white/10"
         >
           Continue with Google

@@ -7,6 +7,7 @@ import { generateAccessAndRefreshTokens } from "../models/user.model.js";
 import crypto from "crypto";
 import { sendVerificationEmail } from "../utils/sendVerificationEmail.js";
 import { sendPasswordResetEmail } from "../utils/sendPasswordResetEmail.js";
+import { AUTH_COOKIE_OPTIONS } from "../constants.js";
 
 const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, username, password } = req.body;
@@ -146,18 +147,10 @@ const loginUser = asyncHandler(async (req, res) => {
   user.refreshToken = refreshToken;
   await user.save({ validateBeforeSave: false });
 
-  //refresh token is being shown in console for debugging
-
-  const options = {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-  };
-
   return res
     .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, AUTH_COOKIE_OPTIONS)
+    .cookie("refreshToken", refreshToken, AUTH_COOKIE_OPTIONS)
     .json(
       new ApiResponse(
         200,
@@ -171,28 +164,35 @@ const loginUser = asyncHandler(async (req, res) => {
     );
 });
 
+// Not behind verifyJWT: logout must still work after the short-lived access token has expired.
+// The refresh token tells us which stored session to revoke.
 const logoutUser = asyncHandler(async (req, res) => {
-  await User.findByIdAndUpdate(
-    req.user._id,
-    {
-      $set: {
-        refreshToken: undefined,
-      },
-    },
-    {
-      new: true,
-    },
-  );
+  const incomingRefreshToken =
+    req.cookies?.refreshToken || req.body?.refreshToken;
 
-  const options = {
-    httpOnly: true,
-    secure: true,
-  };
+  let decodedToken = null;
+  try {
+    decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET,
+    );
+  } catch {
+    // Missing, invalid or expired refresh token: no live session to revoke, just clear the cookies.
+  }
+
+  if (decodedToken) {
+    // Only revoke if it is still the stored token, so an old token can't end a newer login.
+    // $unset is required: Mongoose drops `$set: { refreshToken: undefined }`, which made this a no-op.
+    await User.updateOne(
+      { _id: decodedToken._id, refreshToken: incomingRefreshToken },
+      { $unset: { refreshToken: 1 } },
+    );
+  }
 
   return res
     .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
+    .clearCookie("accessToken", AUTH_COOKIE_OPTIONS)
+    .clearCookie("refreshToken", AUTH_COOKIE_OPTIONS)
     .json(new ApiResponse(200, {}, "User logged out"));
 });
 
@@ -226,16 +226,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     const { accessToken, refreshToken: newRefreshToken } =
       await generateAccessAndRefreshTokens(user._id);
 
-    const options = {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-    };
-
     return res
       .status(200)
-      .cookie("accessToken", accessToken, options)
-      .cookie("refreshToken", newRefreshToken, options)
+      .cookie("accessToken", accessToken, AUTH_COOKIE_OPTIONS)
+      .cookie("refreshToken", newRefreshToken, AUTH_COOKIE_OPTIONS)
       .json(
         new ApiResponse(
           200,
