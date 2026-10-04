@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import ppi from "../api/axios";
+import ppi, { refreshSession, setSessionExpiredHandler } from "../api/axios";
 
 const AuthContext = createContext();
 const SearchContext = createContext();
@@ -75,6 +75,14 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // When api/axios.js can't renew the session (refresh token expired or revoked), show the user as logged out.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setUser(null);
+      setLikedVideoIds(new Set());
+    });
+  }, []);
+
   useEffect(() => {
     const checkUserSession = async () => {
       if (window.location.pathname === "/verify-email") {
@@ -82,11 +90,8 @@ export const AppProvider = ({ children }) => {
         return;
       }
       try {
-        const response = await ppi.post(
-          "/api/v1/users/refresh-token",
-          {},
-          { withCredentials: true }
-        );
+        // Shared with the automatic renewal in api/axios.js, so overlapping refreshes become one request.
+        const response = await refreshSession();
         setUser(response.data.data.user);
         await fetchLikedIds();
       } catch (error) {
