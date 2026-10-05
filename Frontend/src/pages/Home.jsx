@@ -8,9 +8,26 @@ const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
 const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
 const MINIMIZED_LOAD_MORE_PAGE_SIZE = 2;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
+// Minimum time between two load-more requests of one platform. A page already cached in our DB loads twice as
+// fast; a page that needs a new API call keeps the full wait, to protect the API quota.
 const INFINITE_SCROLL_RATE_LIMIT_MS = 1200;
+const CACHED_PAGE_RATE_LIMIT_MS = INFINITE_SCROLL_RATE_LIMIT_MS / 2;
+const RAIL_LOAD_MORE_DISTANCE_PX = 120;
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
+
+// The backend reports how many videos it already has cached after the last one shown (cachedAhead).
+const getLoadMoreIntervalMs = (platformState, pageSize) =>
+  platformState.cachedAhead >= pageSize ? CACHED_PAGE_RATE_LIMIT_MS : INFINITE_SCROLL_RATE_LIMIT_MS;
+
+const isNearRailEnd = railElement =>
+  railElement.scrollWidth - (railElement.scrollLeft + railElement.clientWidth) <= RAIL_LOAD_MORE_DISTANCE_PX;
+
+const isOnScreen = node => {
+  if (!node) return false;
+  const { top, bottom } = node.getBoundingClientRect();
+  return top < window.innerHeight && bottom > 0;
+};
 
 const SearchBar = ({ onSearch, loading, searchInput, onSearchInputChange }) => (
   <form onSubmit={onSearch} className="w-full max-w-2xl mx-auto">
@@ -120,13 +137,31 @@ const PlatformHeading = ({ title, expandedPlatform, onToggle }) => {
   );
 };
 
-const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScrollRight, expandedPlatform, onToggleExpand }) => {
+const VideoCount = ({ shown, fetched }) => (
+  <p className="text-sm text-white/60">
+    Showing {shown} of {fetched} fetched videos
+  </p>
+);
+
+const HorizontalSection = ({
+  title,
+  videos,
+  fetchedCount,
+  containerRef,
+  onScrollLeft,
+  onScrollRight,
+  expandedPlatform,
+  onToggleExpand,
+}) => {
   if (!videos.length) return null;
 
   return (
     <section className="mt-10">
-      <div className="flex items-center justify-between mb-4">
-        <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
+          <VideoCount shown={videos.length} fetched={fetchedCount} />
+        </div>
         <div className="flex items-center gap-2">
           <button onClick={onScrollLeft} className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20">
             ‹
@@ -146,10 +181,11 @@ const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScroll
   );
 };
 
-const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand }) => (
+const ExpandedGridSection = ({ title, videos, fetchedCount, expandedPlatform, onToggleExpand }) => (
   <section className="mt-10">
-    <div className="mb-4">
+    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
       <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
+      <VideoCount shown={videos.length} fetched={fetchedCount} />
     </div>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {videos.map((video, index) => (
@@ -163,45 +199,61 @@ const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand }
 
 function Home() {
   const { loading: authLoading } = useAuth();
-  const { query, setQuery, videos, setVideos } = useSearch();
+  const { query, setQuery, setVideos } = useSearch();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [expandedPlatform, setExpandedPlatform] = useState(null);
   const [searchInput, setSearchInput] = useState("");
+  // Set when the backend answered with a similar cached search instead of the typed text.
+  const [searchNotice, setSearchNotice] = useState(null);
 
   const [videosByPlatform, setVideosByPlatform] = useState({ youtube: [], dailymotion: [] });
   const [pagination, setPagination] = useState({
-    youtube: { cursor: null, hasMore: true, terminalReason: null },
-    dailymotion: { cursor: null, hasMore: true, terminalReason: null },
+    youtube: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
+    dailymotion: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
   });
 
   const youtubeRailRef = useRef(null);
   const dailymotionRailRef = useRef(null);
-  const observer = useRef(null);
+  const railRefsByPlatform = { youtube: youtubeRailRef, dailymotion: dailymotionRailRef };
+  const loadMoreNodeRef = useRef(null);
   const horizontalLoadInFlightRef = useRef({ youtube: false, dailymotion: false });
   const lastLoadMoreAtRef = useRef({
     youtube: 0,
     dailymotion: 0,
   });
+  const delayedLoadTimersRef = useRef({ youtube: null, dailymotion: null });
+  // Latest "load more if the user is at the end of this platform's list", for scroll listeners and timers.
+  const loadMoreIfAtEndRef = useRef(() => {});
 
   const resetLoadMoreRateLimit = useCallback(() => {
     lastLoadMoreAtRef.current = {
       youtube: 0,
       dailymotion: 0,
     };
+    Object.values(delayedLoadTimersRef.current).forEach(clearTimeout);
+    delayedLoadTimersRef.current = { youtube: null, dailymotion: null };
   }, []);
 
-  const canTriggerLoadMore = useCallback(platform => {
-    const now = Date.now();
-    const lastRequestedAt = lastLoadMoreAtRef.current[platform] || 0;
+  // One load per platform per interval. A load asked for during the wait isn't dropped: it runs when the wait
+  // ends, so a user who stopped at the end of a list doesn't have to scroll again to get more videos.
+  const canTriggerLoadMore = useCallback((platform, intervalMs) => {
+    const waitMs = (lastLoadMoreAtRef.current[platform] || 0) + intervalMs - Date.now();
 
-    if (now - lastRequestedAt < INFINITE_SCROLL_RATE_LIMIT_MS) {
+    if (waitMs > 0) {
+      if (!delayedLoadTimersRef.current[platform]) {
+        delayedLoadTimersRef.current[platform] = setTimeout(() => {
+          delayedLoadTimersRef.current[platform] = null;
+          loadMoreIfAtEndRef.current(platform);
+        }, waitMs);
+      }
+
       return false;
     }
 
-    lastLoadMoreAtRef.current[platform] = now;
+    lastLoadMoreAtRef.current[platform] = Date.now();
     return true;
   }, []);
 
@@ -221,7 +273,14 @@ function Home() {
   const flattenByPlatform = useCallback(byPlatform => [...byPlatform.youtube, ...byPlatform.dailymotion], []);
 
   const fetchPlatformVideos = useCallback(
-    async ({ searchQuery, platform, cursorValue = null, isLoadMore = false, limit = INITIAL_PAGE_SIZE_PER_PLATFORM }) => {
+    async ({
+      searchQuery,
+      platform,
+      cursorValue = null,
+      isLoadMore = false,
+      limit = INITIAL_PAGE_SIZE_PER_PLATFORM,
+      exact = false,
+    }) => {
       if (!searchQuery || !platform) return;
       if (isLoadMore && !cursorValue) return;
 
@@ -235,17 +294,28 @@ function Home() {
             cursor: cursorValue,
             platform,
             limit,
+            ...(exact && { exact: true }),
           },
         });
 
-        const { videos: newVideos, nextCursor, hasMore, terminalReasonByPlatform } = response.data.data;
+        const {
+          videos: newVideos,
+          nextCursor,
+          hasMore,
+          terminalReasonByPlatform,
+          cachedAhead,
+          resolvedQuery,
+          similarMatch,
+        } = response.data.data;
+
+        if (!isLoadMore && similarMatch) {
+          setSearchNotice({ typed: searchQuery, resolved: resolvedQuery });
+        }
 
         setVideosByPlatform(previous => {
           const currentPlatformVideos = previous[platform] || [];
           const updatedPlatformVideos = isLoadMore ? mergeUniqueVideos(currentPlatformVideos, newVideos) : newVideos;
-          const updatedState = { ...previous, [platform]: updatedPlatformVideos };
-          setVideos(flattenByPlatform(updatedState));
-          return updatedState;
+          return { ...previous, [platform]: updatedPlatformVideos };
         });
 
         setPagination(previous => ({
@@ -254,6 +324,9 @@ function Home() {
             cursor: nextCursor,
             hasMore,
             terminalReason: terminalReasonByPlatform?.[platform] || null,
+            cachedAhead: cachedAhead ?? 0,
+            // Later pages ask for the cache key the backend chose, so a match can't change mid-scroll.
+            resolvedQuery: resolvedQuery || searchQuery,
           },
         }));
       } catch (requestError) {
@@ -263,33 +336,47 @@ function Home() {
         setLoading(false);
       }
     },
-    [mergeUniqueVideos, setVideos, flattenByPlatform]
+    [mergeUniqueVideos]
   );
 
-  const handleSearch = useCallback(
-    async event => {
-      event.preventDefault();
-      const newQuery = searchInput.trim();
-      if (!newQuery) return;
+  // Player.jsx looks up the clicked video in the shared list. It used to be set from inside the state updater
+  // above, which landed a render late (React warned about it) and left newly mounted rails without scroll listeners.
+  useEffect(() => {
+    setVideos(flattenByPlatform(videosByPlatform));
+  }, [videosByPlatform, setVideos, flattenByPlatform]);
 
+  // `exact` searches the text as typed, even if a similar search is already cached.
+  const runSearch = useCallback(
+    async (newQuery, { exact = false } = {}) => {
       setHasSearched(true);
       setQuery(newQuery);
+      setSearchNotice(null);
       setExpandedPlatform(null);
-      setVideos([]);
       setVideosByPlatform({ youtube: [], dailymotion: [] });
       setPagination({
-        youtube: { cursor: null, hasMore: true, terminalReason: null },
-        dailymotion: { cursor: null, hasMore: true, terminalReason: null },
+        youtube: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
+        dailymotion: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
       });
       resetLoadMoreRateLimit();
 
       await Promise.all(
         SUPPORTED_PLATFORMS.map(platform =>
-          fetchPlatformVideos({ searchQuery: newQuery, platform, cursorValue: null, isLoadMore: false })
+          fetchPlatformVideos({ searchQuery: newQuery, platform, cursorValue: null, isLoadMore: false, exact })
         )
       );
     },
-    [fetchPlatformVideos, resetLoadMoreRateLimit, setQuery, setVideos, searchInput]
+    [fetchPlatformVideos, resetLoadMoreRateLimit, setQuery]
+  );
+
+  const handleSearch = useCallback(
+    event => {
+      event.preventDefault();
+      const newQuery = searchInput.trim();
+      if (!newQuery) return;
+
+      runSearch(newQuery);
+    },
+    [runSearch, searchInput]
   );
 
   const loadMoreExpandedVideos = useCallback(() => {
@@ -297,10 +384,10 @@ function Home() {
 
     const platformState = pagination[expandedPlatform];
     if (!platformState?.hasMore || !platformState?.cursor) return;
-    if (!canTriggerLoadMore(expandedPlatform)) return;
+    if (!canTriggerLoadMore(expandedPlatform, getLoadMoreIntervalMs(platformState, EXPANDED_PAGE_SIZE_PER_PLATFORM))) return;
 
     fetchPlatformVideos({
-      searchQuery: query,
+      searchQuery: platformState.resolvedQuery || query,
       platform: expandedPlatform,
       cursorValue: platformState.cursor,
       isLoadMore: true,
@@ -315,12 +402,12 @@ function Home() {
       const platformState = pagination[platform];
       if (!platformState?.hasMore || !platformState?.cursor) return;
       if (horizontalLoadInFlightRef.current[platform]) return;
-      if (!canTriggerLoadMore(platform)) return;
+      if (!canTriggerLoadMore(platform, getLoadMoreIntervalMs(platformState, MINIMIZED_LOAD_MORE_PAGE_SIZE))) return;
 
       horizontalLoadInFlightRef.current[platform] = true;
 
       fetchPlatformVideos({
-        searchQuery: query,
+        searchQuery: platformState.resolvedQuery || query,
         platform,
         cursorValue: platformState.cursor,
         isLoadMore: true,
@@ -332,34 +419,42 @@ function Home() {
     [canTriggerLoadMore, expandedPlatform, fetchPlatformVideos, loading, pagination, query]
   );
 
-  const loadMoreRef = useCallback(
-    node => {
-      if (observer.current) {
-        observer.current.disconnect();
+  useEffect(() => {
+    loadMoreIfAtEndRef.current = platform => {
+      if (expandedPlatform === platform) {
+        if (isOnScreen(loadMoreNodeRef.current)) loadMoreExpandedVideos();
+        return;
       }
 
-      if (!node || !expandedPlatform || loading) return;
+      const railElement = railRefsByPlatform[platform].current;
+      if (expandedPlatform === null && railElement && isNearRailEnd(railElement)) {
+        loadMoreHorizontalVideos(platform);
+      }
+    };
+  });
 
-      const platformState = pagination[expandedPlatform];
-      if (!platformState?.hasMore) return;
+  // The grid checks on every scroll, like the rails. An IntersectionObserver missed the user reaching the bottom
+  // when a new row and the scroll landed between two frames: it only reports changes, so it never fired again.
+  useEffect(() => {
+    if (!expandedPlatform) return;
 
-      observer.current = new IntersectionObserver(entries => {
-        if (entries[0].isIntersecting) {
-          loadMoreExpandedVideos();
-        }
-      });
+    const onScroll = () => loadMoreIfAtEndRef.current(expandedPlatform);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [expandedPlatform]);
 
-      observer.current.observe(node);
-    },
-    [expandedPlatform, loading, pagination, loadMoreExpandedVideos]
-  );
+  // Scrolling isn't the only way to reach the end: a list that doesn't fill the screen (a tall window, a rail on a
+  // wide monitor) can't be scrolled at all. So check whenever videos arrive too; this also fills a grid when it
+  // opens. `loading` is shared by both platforms' requests, so it alone doesn't change for every arrival.
+  useEffect(() => {
+    if (loading) return;
 
-  useEffect(
-    () => () => {
-      observer.current?.disconnect();
-    },
-    []
-  );
+    const platforms = expandedPlatform ? [expandedPlatform] : SUPPORTED_PLATFORMS;
+    platforms.forEach(platform => loadMoreIfAtEndRef.current(platform));
+  }, [loading, expandedPlatform, videosByPlatform]);
+
+  // Leaving the page cancels pending delayed loads.
+  useEffect(() => resetLoadMoreRateLimit, [resetLoadMoreRateLimit]);
 
   useEffect(() => {
     if (expandedPlatform !== null) return;
@@ -369,8 +464,7 @@ function Home() {
       if (!railElement) return () => {};
 
       const onScroll = () => {
-        const distanceFromEnd = railElement.scrollWidth - (railElement.scrollLeft + railElement.clientWidth);
-        if (distanceFromEnd <= 120) {
+        if (isNearRailEnd(railElement)) {
           loadMoreHorizontalVideos(platform);
         }
       };
@@ -398,7 +492,9 @@ function Home() {
     setExpandedPlatform(current => (current === platform ? null : platform));
   };
 
-  const hasAnyVideos = videos.length > 0;
+  const hasAnyVideos = videosByPlatform.youtube.length + videosByPlatform.dailymotion.length > 0;
+  // Everything our DB has for this search so far: what's on screen plus what's cached after it.
+  const getFetchedCount = platform => videosByPlatform[platform].length + pagination[platform].cachedAhead;
   const activePlatformState = expandedPlatform ? pagination[expandedPlatform] : null;
 
   if (authLoading) {
@@ -423,6 +519,20 @@ function Home() {
           onSearchInputChange={event => setSearchInput(event.target.value)}
         />
 
+        {searchNotice && (
+          <p className="text-center text-white/70 mt-6">
+            Showing results for <span className="font-semibold text-white">"{searchNotice.resolved}"</span>.{" "}
+            <button
+              type="button"
+              onClick={() => runSearch(searchNotice.typed, { exact: true })}
+              disabled={loading}
+              className="text-purple-300 underline hover:text-white disabled:opacity-50"
+            >
+              Search instead for "{searchNotice.typed}"
+            </button>
+          </p>
+        )}
+
         {error && <p className="text-center text-red-400 mt-8">{error}</p>}
 
         {!loading && !error && hasSearched && !hasAnyVideos && (
@@ -434,6 +544,7 @@ function Home() {
             <HorizontalSection
               title="YouTube"
               videos={videosByPlatform.youtube}
+              fetchedCount={getFetchedCount("youtube")}
               containerRef={youtubeRailRef}
               onScrollLeft={() => scrollRailBy(youtubeRailRef, -900)}
               onScrollRight={() => scrollRailBy(youtubeRailRef, 900)}
@@ -444,6 +555,7 @@ function Home() {
             <HorizontalSection
               title="Dailymotion"
               videos={videosByPlatform.dailymotion}
+              fetchedCount={getFetchedCount("dailymotion")}
               containerRef={dailymotionRailRef}
               onScrollLeft={() => scrollRailBy(dailymotionRailRef, -900)}
               onScrollRight={() => scrollRailBy(dailymotionRailRef, 900)}
@@ -457,6 +569,7 @@ function Home() {
           <ExpandedGridSection
             title="YouTube"
             videos={videosByPlatform.youtube}
+            fetchedCount={getFetchedCount("youtube")}
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("youtube")}
           />
@@ -466,12 +579,13 @@ function Home() {
           <ExpandedGridSection
             title="Dailymotion"
             videos={videosByPlatform.dailymotion}
+            fetchedCount={getFetchedCount("dailymotion")}
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("dailymotion")}
           />
         )}
 
-        {expandedPlatform && <div ref={loadMoreRef} className="h-4" />}
+        {expandedPlatform && <div ref={loadMoreNodeRef} className="h-4" />}
 
         {!loading && hasSearched && expandedPlatform && activePlatformState && !activePlatformState.hasMore && (
           <p className="text-center text-white/70 mt-8">

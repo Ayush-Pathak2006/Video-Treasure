@@ -14,6 +14,20 @@ const buildQuotaError = () => {
   return error;
 };
 
+// search.list returns HTML-escaped text ("Tom &amp; Jerry").
+const HTML_ENTITIES = { amp: "&", quot: '"', "#39": "'", lt: "<", gt: ">" };
+const decodeHtmlEntities = text => (text || "").replace(/&(amp|quot|#39|lt|gt);/g, (_, entity) => HTML_ENTITIES[entity]);
+
+// ISO 8601 duration ("PT4M13S") to seconds; null for anything else.
+const parseDurationSeconds = isoDuration => {
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(isoDuration || "");
+
+  if (!match) return null;
+
+  const [days, hours, minutes, seconds] = match.slice(1).map(part => Number(part) || 0);
+  return ((days * 24 + hours) * 60 + minutes) * 60 + seconds;
+};
+
 const getStatisticsMap = async videoIds => {
   if (!videoIds.length) {
     return new Map();
@@ -22,7 +36,7 @@ const getStatisticsMap = async videoIds => {
   const response = await axios.get(YOUTUBE_VIDEOS_API, {
     params: {
       key: process.env.YOUTUBE_API_KEY,
-      part: "statistics",
+      part: "statistics,contentDetails",
       id: videoIds.join(","),
       maxResults: 50,
     },
@@ -34,6 +48,7 @@ const getStatisticsMap = async videoIds => {
     statsMap.set(item.id, {
       views: Number(item.statistics?.viewCount) || 0,
       likes: Number(item.statistics?.likeCount) || 0,
+      durationSeconds: parseDurationSeconds(item.contentDetails?.duration),
     });
   }
 
@@ -46,6 +61,8 @@ export const searchYouTube = async (query, pageToken = null, options = {}) => {
     part: "snippet",
     q: query,
     type: "video",
+    // The app plays everything in an embed, where a non-embeddable video only shows "Video unavailable".
+    videoEmbeddable: "true",
     maxResults: options.maxResults || 12,
   };
 
@@ -75,19 +92,21 @@ export const searchYouTube = async (query, pageToken = null, options = {}) => {
 
   const videos = items.map(item => {
     const id = item.id.videoId;
-    const stats = statsMap.get(id) || { views: 0, likes: 0 };
+    const stats = statsMap.get(id) || { views: 0, likes: 0, durationSeconds: null };
 
     return {
       platform: "youtube",
       platformVideoId: id,
       query,
-      title: item.snippet.title,
-      description: item.snippet.description,
+      title: decodeHtmlEntities(item.snippet.title),
+      description: decodeHtmlEntities(item.snippet.description),
       thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default?.url,
-      channelTitle: item.snippet.channelTitle,
+      channelTitle: decodeHtmlEntities(item.snippet.channelTitle),
       publishedAt: item.snippet.publishedAt,
       views: stats.views,
       likes: stats.likes,
+      // Read by rankByRelevance; not stored.
+      rankingHints: { durationSeconds: stats.durationSeconds },
     };
   });
 

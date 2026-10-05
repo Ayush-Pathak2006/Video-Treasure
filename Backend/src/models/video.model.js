@@ -59,6 +59,12 @@ const videoSchema = new Schema(
       index: true,
     },
 
+    // Position in this search's cached results, best first (see utils/searchRanks.js). Can be negative:
+    // the crawler puts its picks in front of everything cached before.
+    searchRank: {
+      type: Number,
+    },
+
     fetchedAt: {
       type: Date,
       default: Date.now,
@@ -67,10 +73,13 @@ const videoSchema = new Schema(
   { timestamps: true }
 );
 
-// IMPORTANT: dedupe across platforms
+// IMPORTANT: one row per video per cache key. The same video can still be cached under several queries.
 videoSchema.index(
-  { platform: 1, platformVideoId: 1, query: 1, createdAt: -1 },
+  { platform: 1, platformVideoId: 1, query: 1 },
   { unique: true }
 );
+
+// Search results are paged in this order.
+videoSchema.index({ query: 1, searchRank: 1, _id: 1 });
 
 export const Video = mongoose.model("Video", videoSchema);

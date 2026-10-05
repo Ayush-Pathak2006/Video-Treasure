@@ -43,7 +43,9 @@ export const searchDailymotion = async (query, page = null, options = {}) => {
     search: query,
     limit: options.maxResults || PAGE_SIZE,
     page: pageNumber,
-    fields: "id,title,description,thumbnail_url,created_time,channel,views_total,likes_total",
+    // "channel" would be the category ("music", "news"); the uploader is owner.screenname.
+    fields:
+      "id,title,description,thumbnail_url,created_time,owner.screenname,owner.verified,duration,views_total,likes_total",
   };
 
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -57,10 +59,12 @@ export const searchDailymotion = async (query, page = null, options = {}) => {
     title: item.title,
     description: item.description,
     thumbnail: item.thumbnail_url,
-    channelTitle: item.channel || "Dailymotion",
+    channelTitle: item["owner.screenname"] || "Dailymotion",
     publishedAt: new Date(item.created_time * 1000),
     views: Number(item.views_total) || 0,
     likes: Number(item.likes_total) || 0,
+    // Read by rankByRelevance; not stored.
+    rankingHints: { durationSeconds: Number(item.duration) || null, verified: Boolean(item["owner.verified"]) },
   }));
 
   const hasExplicitMore = Boolean(response.data.has_more);

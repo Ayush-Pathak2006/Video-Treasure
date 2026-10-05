@@ -2,6 +2,7 @@ import { Video } from "../models/video.model.js";
 import { NICHE_TOPICS, getCombinedNicheQuery } from "../config/niches.config.js";
 import { PROVIDERS, SUPPORTED_PLATFORMS } from "../providers/provider.registry.js";
 import { rankVideos } from "../utils/videoRanking.js";
+import { assignSearchRanks } from "../utils/searchRanks.js";
 import {
   getCrawlerMinRemainingPercent,
   getQuotaSnapshot,
@@ -51,19 +52,18 @@ const crawlAllNichesOnce = async () => {
         return result.value.videos || [];
       });
 
-      const ranked = rankVideos(fetchedVideos).map(video => ({
-        ...video,
-        query: nicheName,
-      }));
-
-      const selected = ranked.slice(0, FETCH_PER_NICHE);
+      const selected = rankVideos(fetchedVideos).slice(0, FETCH_PER_NICHE);
 
       if (!selected.length) {
         console.log(`⚠️ [crawler:${nicheName}] no videos fetched from providers.`);
         continue;
       }
 
-      const inserted = await Video.insertMany(selected, { ordered: false }).catch(() => []);
+      // Fresh picks go in front of everything already cached for the niche.
+      const rankedSelection = await assignSearchRanks(selected, nicheName, { atStart: true });
+
+      // Videos already cached under this niche are rejected by the unique index; the rest are still inserted.
+      const inserted = await Video.insertMany(rankedSelection, { ordered: false }).catch(error => error.insertedDocs ?? []);
       const insertedCount = Array.isArray(inserted) ? inserted.length : 0;
 
       console.log(`✅ [crawler:${nicheName}] selected=${selected.length} inserted=${insertedCount}`);

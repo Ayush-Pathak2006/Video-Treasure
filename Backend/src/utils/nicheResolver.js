@@ -29,3 +29,10 @@ export const resolveSearchIntent = rawQuery => {
     niche: matchedNiche.name,
   };
 };
+
+// Intent for a key that is already in the cache. It's used exactly as stored, because keys cached before
+// searches were normalized can still have capitals ("Guitar Lessons").
+export const resolveCachedSearchIntent = cacheKey => {
+  const intent = resolveSearchIntent(cacheKey);
+  return intent.niche ? intent : { dbQuery: cacheKey, providerQuery: normalize(cacheKey), niche: null };
+};

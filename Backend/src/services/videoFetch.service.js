@@ -1,10 +1,21 @@
 import { Video } from "../models/video.model.js";
 import { QueryState } from "../models/queryState.model.js";
 import { PROVIDERS, SUPPORTED_PLATFORMS } from "../providers/provider.registry.js";
+import { rankByRelevance } from "../utils/videoRanking.js";
+import { assignSearchRanks } from "../utils/searchRanks.js";
+import { rememberCachedSearch } from "../utils/similarSearch.js";
+import { ApiError } from "../utils/ApiError.js";
 
 const DEFAULT_PAGE_SIZE = 12;
 const MAX_PAGE_SIZE = 24;
 const MAX_REFILL_CYCLES = 4;
+
+// A YouTube search costs 100 units whether it returns 12 or 50 videos, and 50 candidates give the ranker
+// room to find the official upload.
+const SEARCH_CANDIDATES_PER_CALL = 50;
+
+// Best first. _id breaks ties: two platforms refilled at the same moment can get the same rank numbers.
+const SEARCH_ORDER = { searchRank: 1, _id: 1 };
 
 // A query/platform exhausted by a temporary problem (quota, rate limit, access denied) may call the API
 // again after this cooldown. "all_videos_accessed" is permanent: the provider has no more pages.
@@ -32,10 +43,32 @@ const mapProviderErrorToReason = error => {
   return null;
 };
 
-const buildVideoFilter = (query, cursorDate, platformFilter) => ({
+// The client cursor is "<searchRank>_<_id>" of the last video it was sent.
+const encodeCursor = video => `${video.searchRank}_${video._id}`;
+
+const decodeCursor = rawCursor => {
+  const [rank, id] = String(rawCursor).split("_");
+  const searchRank = Number(rank);
+
+  if (rank === "" || !Number.isFinite(searchRank) || !/^[a-f\d]{24}$/i.test(id || "")) {
+    throw new ApiError(400, "Invalid cursor.");
+  }
+
+  return { searchRank, _id: id };
+};
+
+// Videos without a searchRank aren't ranked yet (ensureSearchRanks ranks them on the next start), so they stay hidden.
+const buildVideoFilter = (query, cursor, platformFilter) => ({
   ...(Array.isArray(query) ? { query: { $in: query } } : { query }),
   ...(platformFilter !== "all" && { platform: platformFilter }),
-  ...(cursorDate && { publishedAt: { $lt: cursorDate } }),
+  ...(cursor
+    ? {
+        $or: [
+          { searchRank: { $gt: cursor.searchRank } },
+          { searchRank: cursor.searchRank, _id: { $gt: cursor._id } },
+        ],
+      }
+    : { searchRank: { $ne: null } }),
 });
 
 const normalizeLimit = rawLimit => {
@@ -51,7 +84,7 @@ const normalizeLimit = rawLimit => {
 const getPlatformsToSearch = platform => {
   if (!platform || platform === "all") return SUPPORTED_PLATFORMS;
   if (!SUPPORTED_PLATFORMS.includes(platform)) {
-    throw new Error(`Unsupported platform: ${platform}`);
+    throw new ApiError(400, `Unsupported platform: ${platform}`);
   }
   return [platform];
 };
@@ -101,11 +134,14 @@ const refillVideosFromApi = async ({ dbQuery, providerQuery, platform, state }) 
   }
 
   try {
-    const { videos: apiVideos, nextPageToken } = await provider.search(providerQuery, state.nextPageToken);
+    const { videos: apiVideos, nextPageToken } = await provider.search(providerQuery, state.nextPageToken, {
+      maxResults: SEARCH_CANDIDATES_PER_CALL,
+    });
 
     if (apiVideos.length > 0) {
-      const normalizedVideos = apiVideos.map(video => ({ ...video, query: dbQuery }));
-      await Video.insertMany(normalizedVideos, { ordered: false }).catch(() => {});
+      const rankedVideos = await assignSearchRanks(rankByRelevance(apiVideos, providerQuery), dbQuery);
+      await Video.insertMany(rankedVideos, { ordered: false }).catch(() => {});
+      rememberCachedSearch(dbQuery, rankedVideos);
     }
 
     if (nextPageToken) {
@@ -140,8 +176,8 @@ const groupVideosByPlatform = videos =>
     return acc;
   }, {});
 
-const countRemainingDbVideos = (query, platform, cursorDate) =>
-  Video.countDocuments(buildVideoFilter(query, cursorDate, platform));
+const countRemainingDbVideos = (query, platform, cursor) =>
+  Video.countDocuments(buildVideoFilter(query, cursor, platform));
 
 const loadStatesByPlatform = async (query, platformsToSearch) => {
   const stateEntries = await Promise.all(
@@ -154,11 +190,11 @@ const loadStatesByPlatform = async (query, platformsToSearch) => {
   return Object.fromEntries(stateEntries);
 };
 
-const refillFromApiUntilPageFilled = async ({ dbQuery, providerQuery, platform, cursorDate, platformsToSearch, pageSize }) => {
+const refillFromApiUntilPageFilled = async ({ dbQuery, providerQuery, platform, cursor, platformsToSearch, pageSize }) => {
   let statesByPlatform = await loadStatesByPlatform(dbQuery, platformsToSearch);
 
   for (let refillCycle = 0; refillCycle < MAX_REFILL_CYCLES; refillCycle += 1) {
-    const remainingInDb = await countRemainingDbVideos(dbQuery, platform, cursorDate);
+    const remainingInDb = await countRemainingDbVideos(dbQuery, platform, cursor);
 
     if (remainingInDb >= pageSize) {
       break;
@@ -188,11 +224,11 @@ const refillFromApiUntilPageFilled = async ({ dbQuery, providerQuery, platform, 
 
 export const fetchVideosByQuery = async ({ query, cursor = null, platform = "all", limit = DEFAULT_PAGE_SIZE, providerQuery = null }) => {
   const pageSize = normalizeLimit(limit);
-  const cursorDate = cursor ? new Date(cursor) : null;
+  const decodedCursor = cursor ? decodeCursor(cursor) : null;
   const platformsToSearch = getPlatformsToSearch(platform);
-  const filter = buildVideoFilter(query, cursorDate, platform);
+  const filter = buildVideoFilter(query, decodedCursor, platform);
   const normalizedProviderQuery = providerQuery || query;
-  let videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(pageSize);
+  let videos = await Video.find(filter).sort(SEARCH_ORDER).limit(pageSize);
 
   let statesByPlatform = {};
 
@@ -201,16 +237,17 @@ export const fetchVideosByQuery = async ({ query, cursor = null, platform = "all
       dbQuery: query,
       providerQuery: normalizedProviderQuery,
       platform,
-      cursorDate,
+      cursor: decodedCursor,
       platformsToSearch,
       pageSize,
     });
 
-    videos = await Video.find(filter).sort({ publishedAt: -1 }).limit(pageSize);
+    videos = await Video.find(filter).sort(SEARCH_ORDER).limit(pageSize);
   }
 
-  const nextCursor = videos.length > 0 ? videos[videos.length - 1].publishedAt : null;
-  const remainingAfterPage = nextCursor ? await Video.countDocuments(buildVideoFilter(query, nextCursor, platform)) : 0;
+  const lastVideo = videos.at(-1);
+  const nextCursor = lastVideo ? encodeCursor(lastVideo) : null;
+  const remainingAfterPage = lastVideo ? await countRemainingDbVideos(query, platform, lastVideo) : 0;
 
   const freshStates =
     Object.keys(statesByPlatform).length > 0 ? statesByPlatform : await loadStatesByPlatform(query, platformsToSearch);
@@ -242,5 +279,7 @@ export const fetchVideosByQuery = async ({ query, cursor = null, platform = "all
     nextCursor,
     hasMore,
     terminalReasonByPlatform,
+    // Videos already in the DB after this page. While it covers the next page, that page needs no API call.
+    cachedAhead: remainingAfterPage,
   };
 };
