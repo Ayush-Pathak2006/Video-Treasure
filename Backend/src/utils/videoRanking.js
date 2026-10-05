@@ -102,7 +102,7 @@ const RELEVANCE_WEIGHTS = {
 export const normalizeText = value =>
   String(value || "")
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
     .trim();

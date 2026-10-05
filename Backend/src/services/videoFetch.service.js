@@ -262,8 +262,11 @@ export const fetchVideosByQuery = async ({ query, cursor = null, platform = "all
   const canStillFetchFromApi = platformsToSearch.some(currentPlatform => !freshStates[currentPlatform]?.exhausted);
   const hasMore = remainingAfterPage > 0 || canStillFetchFromApi;
 
+  // The real counts only go to the server log. "shown" is how far into the cached results this page reaches.
+  const cachedTotal = await countRemainingDbVideos(query, platform, null);
+
   console.log(
-    `ℹ️ [videos:${query}] pageSize=${pageSize} platform=${platform} returned=${videos.length} remainingInDb=${remainingAfterPage} canStillFetchFromApi=${canStillFetchFromApi} hasMore=${hasMore}`
+    `ℹ️ [videos:${query}] pageSize=${pageSize} platform=${platform} returned=${videos.length} shown=${cachedTotal - remainingAfterPage} fetched=${cachedTotal} remainingInDb=${remainingAfterPage} canStillFetchFromApi=${canStillFetchFromApi} hasMore=${hasMore}`
   );
 
   if (!hasMore) {
@@ -279,7 +282,8 @@ export const fetchVideosByQuery = async ({ query, cursor = null, platform = "all
     nextCursor,
     hasMore,
     terminalReasonByPlatform,
-    // Videos already in the DB after this page. While it covers the next page, that page needs no API call.
-    cachedAhead: remainingAfterPage,
+    // Videos already in the DB after this page, capped at the largest page size. That's enough for the frontend
+    // to know whether the next page needs an API call, without telling every visitor how much is cached.
+    cachedAhead: Math.min(remainingAfterPage, MAX_PAGE_SIZE),
   };
 };

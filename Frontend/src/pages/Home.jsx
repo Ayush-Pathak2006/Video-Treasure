@@ -137,31 +137,13 @@ const PlatformHeading = ({ title, expandedPlatform, onToggle }) => {
   );
 };
 
-const VideoCount = ({ shown, fetched }) => (
-  <p className="text-sm text-white/60">
-    Showing {shown} of {fetched} fetched videos
-  </p>
-);
-
-const HorizontalSection = ({
-  title,
-  videos,
-  fetchedCount,
-  containerRef,
-  onScrollLeft,
-  onScrollRight,
-  expandedPlatform,
-  onToggleExpand,
-}) => {
+const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScrollRight, expandedPlatform, onToggleExpand }) => {
   if (!videos.length) return null;
 
   return (
     <section className="mt-10">
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
-          <VideoCount shown={videos.length} fetched={fetchedCount} />
-        </div>
+      <div className="flex items-center justify-between mb-4">
+        <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
         <div className="flex items-center gap-2">
           <button onClick={onScrollLeft} className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20">
             ‹
@@ -181,11 +163,10 @@ const HorizontalSection = ({
   );
 };
 
-const ExpandedGridSection = ({ title, videos, fetchedCount, expandedPlatform, onToggleExpand }) => (
+const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand }) => (
   <section className="mt-10">
-    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+    <div className="mb-4">
       <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
-      <VideoCount shown={videos.length} fetched={fetchedCount} />
     </div>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {videos.map((video, index) => (
@@ -493,8 +474,6 @@ function Home() {
   };
 
   const hasAnyVideos = videosByPlatform.youtube.length + videosByPlatform.dailymotion.length > 0;
-  // Everything our DB has for this search so far: what's on screen plus what's cached after it.
-  const getFetchedCount = platform => videosByPlatform[platform].length + pagination[platform].cachedAhead;
   const activePlatformState = expandedPlatform ? pagination[expandedPlatform] : null;
 
   if (authLoading) {
@@ -544,7 +523,6 @@ function Home() {
             <HorizontalSection
               title="YouTube"
               videos={videosByPlatform.youtube}
-              fetchedCount={getFetchedCount("youtube")}
               containerRef={youtubeRailRef}
               onScrollLeft={() => scrollRailBy(youtubeRailRef, -900)}
               onScrollRight={() => scrollRailBy(youtubeRailRef, 900)}
@@ -555,7 +533,6 @@ function Home() {
             <HorizontalSection
               title="Dailymotion"
               videos={videosByPlatform.dailymotion}
-              fetchedCount={getFetchedCount("dailymotion")}
               containerRef={dailymotionRailRef}
               onScrollLeft={() => scrollRailBy(dailymotionRailRef, -900)}
               onScrollRight={() => scrollRailBy(dailymotionRailRef, 900)}
@@ -569,7 +546,6 @@ function Home() {
           <ExpandedGridSection
             title="YouTube"
             videos={videosByPlatform.youtube}
-            fetchedCount={getFetchedCount("youtube")}
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("youtube")}
           />
@@ -579,7 +555,6 @@ function Home() {
           <ExpandedGridSection
             title="Dailymotion"
             videos={videosByPlatform.dailymotion}
-            fetchedCount={getFetchedCount("dailymotion")}
             expandedPlatform={expandedPlatform}
             onToggleExpand={() => toggleExpand("dailymotion")}
           />
