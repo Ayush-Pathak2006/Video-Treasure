@@ -25,3 +25,24 @@ export const verifyJWT = asyncHandler(async(req, _, next) => {
         throw new ApiError(401, error?.message || "Invalid access token");
     }
 });
+
+// For public routes that treat logged-in visitors differently (search limits). A valid access token sets
+// req.user; a missing, expired or invalid one means anonymous. These routes never answer 401.
+export const optionalJWT = asyncHandler(async(req, _, next) => {
+    const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
+
+    if (token) {
+        try {
+            const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            const user = await User.findById(decodedToken?._id).select("-password -refreshToken");
+
+            if (user) {
+                req.user = user;
+            }
+        } catch {
+            // Anonymous.
+        }
+    }
+
+    next();
+});

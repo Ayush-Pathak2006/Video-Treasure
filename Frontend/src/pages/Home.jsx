@@ -1,13 +1,40 @@
 import { Link } from "react-router-dom";
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Header from "../components/Header";
+import QuotaLimitCard from "../components/QuotaLimitCard";
+import { SaveToPlaylistButton } from "../components/SaveToPlaylistDialog";
 import { useAuth, useSearch } from "../context/AppContext";
-import ppi from "../api/axios";
+import ppi, { renewSession } from "../api/axios";
+import { YOUTUBE_TERMS_URL } from "../config/site";
 
 const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
 const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
 const MINIMIZED_LOAD_MORE_PAGE_SIZE = 2;
 const SUPPORTED_PLATFORMS = ["youtube", "dailymotion"];
+const PLATFORM_NAMES = { youtube: "YouTube", dailymotion: "Dailymotion" };
+
+// Terminal reasons that mean "the API isn't being called right now", not "there are no more videos".
+// The limit card shows them, with retryAt.
+const LIMIT_REASONS = new Set(["visitor_limit", "daily_limit", "rate_limit_hit", "api_access_denied"]);
+
+// The search to run again after logging in from the limit card. sessionStorage survives Google login's
+// full-page redirect.
+const RESUME_SEARCH_KEY = "videoTreasure.resumeSearch";
+
+const createPlatformPagination = () => ({
+  cursor: null,
+  hasMore: true,
+  terminalReason: null,
+  retryAt: null,
+  cachedAhead: 0,
+  resolvedQuery: null,
+  viewer: null,
+});
+
+const createPagination = () => Object.fromEntries(SUPPORTED_PLATFORMS.map(platform => [platform, createPlatformPagination()]));
+
+// The card replaces "more videos" only at the edge of the cache: cached videos are still served past a limit.
+const isStoppedByLimit = platformState => !platformState.hasMore && LIMIT_REASONS.has(platformState.terminalReason);
 // Minimum time between two load-more requests of one platform. A page already cached in our DB loads twice as
 // fast; a page that needs a new API call keeps the full wait, to protect the API quota.
 const INFINITE_SCROLL_RATE_LIMIT_MS = 1200;
@@ -76,7 +103,8 @@ const VideoCard = ({ video, fullWidth = false }) => {
     <div
       className={`bg-white/5 p-4 rounded-xl border border-white/10 shadow-lg group transform hover:-translate-y-1 transition-all duration-300 cursor-pointer relative ${fullWidth ? "w-full" : "min-w-[320px] max-w-[320px]"}`}
     >
-      <Link to={`/watch/${video.platform}/${video.platformVideoId}`} className="block">
+      {/* The video travels in the router state too, so the Player has its details even after the search changes. */}
+      <Link to={`/watch/${video.platform}/${video.platformVideoId}`} state={{ video }} className="block">
         <div className="relative mb-4 aspect-video rounded-lg overflow-hidden">
           <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
           <span className="absolute top-2 left-2 text-xs px-2 py-1 rounded-full bg-black/70 uppercase">{video.platform}</span>
@@ -87,18 +115,21 @@ const VideoCard = ({ video, fullWidth = false }) => {
         </div>
       </Link>
 
-      {user && (
-        <button onClick={handleLike} className="absolute top-2 right-2 text-red-500 transition-colors p-1 bg-black/20 rounded-full z-10">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={isLiked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 20.25l-7.682-7.682a4.5 4.5 0 010-6.364z"
-            />
-          </svg>
-        </button>
-      )}
+      <div className="absolute top-2 right-2 flex gap-1 z-10">
+        <SaveToPlaylistButton video={video} className="p-1 rounded-full bg-black/20 text-white/80 hover:text-white transition-colors" />
+        {user && (
+          <button onClick={handleLike} className="text-red-500 transition-colors p-1 bg-black/20 rounded-full">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={isLiked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 20.25l-7.682-7.682a4.5 4.5 0 010-6.364z"
+              />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -137,13 +168,15 @@ const PlatformHeading = ({ title, expandedPlatform, onToggle }) => {
   );
 };
 
-const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScrollRight, expandedPlatform, onToggleExpand }) => {
-  if (!videos.length) return null;
+// `footer` is shown after the last card, inside the rail (the limit card). `heading` replaces the expand toggle
+// (the trending rails can't be expanded).
+const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScrollRight, expandedPlatform, onToggleExpand, footer, heading }) => {
+  if (!videos.length && !footer) return null;
 
   return (
     <section className="mt-10">
       <div className="flex items-center justify-between mb-4">
-        <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />
+        {heading || <PlatformHeading title={title} expandedPlatform={expandedPlatform} onToggle={onToggleExpand} />}
         <div className="flex items-center gap-2">
           <button onClick={onScrollLeft} className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20">
             ‹
@@ -158,6 +191,7 @@ const HorizontalSection = ({ title, videos, containerRef, onScrollLeft, onScroll
         {videos.map((video, index) => (
           <VideoCard key={`${getVideoKey(video)}-${index}`} video={video} />
         ))}
+        {footer}
       </div>
     </section>
   );
@@ -179,7 +213,7 @@ const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand }
 );
 
 function Home() {
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { query, setQuery, setVideos } = useSearch();
 
   const [loading, setLoading] = useState(false);
@@ -191,14 +225,16 @@ function Home() {
   const [searchNotice, setSearchNotice] = useState(null);
 
   const [videosByPlatform, setVideosByPlatform] = useState({ youtube: [], dailymotion: [] });
-  const [pagination, setPagination] = useState({
-    youtube: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
-    dailymotion: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
-  });
+  const [pagination, setPagination] = useState(createPagination);
 
   const youtubeRailRef = useRef(null);
   const dailymotionRailRef = useRef(null);
   const railRefsByPlatform = { youtube: youtubeRailRef, dailymotion: dailymotionRailRef };
+  // "Trending in India", shown before the first search. Served from the backend's snapshots, so it costs no quota.
+  const [trendingByPlatform, setTrendingByPlatform] = useState(null);
+  const trendingYoutubeRailRef = useRef(null);
+  const trendingDailymotionRailRef = useRef(null);
+  const trendingRailRefs = { youtube: trendingYoutubeRailRef, dailymotion: trendingDailymotionRailRef };
   const loadMoreNodeRef = useRef(null);
   const horizontalLoadInFlightRef = useRef({ youtube: false, dailymotion: false });
   const lastLoadMoreAtRef = useRef({
@@ -269,24 +305,40 @@ function Home() {
       setError(null);
 
       try {
-        const response = await ppi.get("/api/v1/videos/search", {
-          params: {
-            q: searchQuery,
-            cursor: cursorValue,
-            platform,
-            limit,
-            ...(exact && { exact: true }),
-          },
-        });
+        const requestPage = () =>
+          ppi.get("/api/v1/videos/search", {
+            params: {
+              q: searchQuery,
+              cursor: cursorValue,
+              platform,
+              limit,
+              ...(exact && { exact: true }),
+            },
+          });
+
+        let response = await requestPage();
+
+        // Search is public, so an expired access token doesn't fail with 401: it just counts as anonymous.
+        // Renew the session once and ask again, so a logged-in user keeps the logged-in limits.
+        if (user && response.data.data.viewer === "anonymous") {
+          try {
+            await renewSession();
+            response = await requestPage();
+          } catch {
+            // The session is gone (AppContext now shows the user as logged out), so the anonymous answer stands.
+          }
+        }
 
         const {
           videos: newVideos,
           nextCursor,
           hasMore,
           terminalReasonByPlatform,
+          retryAtByPlatform,
           cachedAhead,
           resolvedQuery,
           similarMatch,
+          viewer,
         } = response.data.data;
 
         if (!isLoadMore && similarMatch) {
@@ -305,19 +357,22 @@ function Home() {
             cursor: nextCursor,
             hasMore,
             terminalReason: terminalReasonByPlatform?.[platform] || null,
+            retryAt: retryAtByPlatform?.[platform] || null,
             cachedAhead: cachedAhead ?? 0,
             // Later pages ask for the cache key the backend chose, so a match can't change mid-scroll.
             resolvedQuery: resolvedQuery || searchQuery,
+            viewer,
           },
         }));
       } catch (requestError) {
         console.error(requestError);
-        setError("Could not fetch videos. Please try again.");
+        // The backend's own message explains a rejected search ("2 to 100 characters…") or a flood limit.
+        setError(requestError.response?.data?.message || "Could not fetch videos. Please try again.");
       } finally {
         setLoading(false);
       }
     },
-    [mergeUniqueVideos]
+    [mergeUniqueVideos, user]
   );
 
   // Player.jsx looks up the clicked video in the shared list. It used to be set from inside the state updater
@@ -334,10 +389,7 @@ function Home() {
       setSearchNotice(null);
       setExpandedPlatform(null);
       setVideosByPlatform({ youtube: [], dailymotion: [] });
-      setPagination({
-        youtube: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
-        dailymotion: { cursor: null, hasMore: true, terminalReason: null, cachedAhead: 0, resolvedQuery: null },
-      });
+      setPagination(createPagination());
       resetLoadMoreRateLimit();
 
       await Promise.all(
@@ -400,6 +452,55 @@ function Home() {
     [canTriggerLoadMore, expandedPlatform, fetchPlatformVideos, loading, pagination, query]
   );
 
+  // The limit card's button, once its retryAt has passed: asks the platform for the next page again, or for the
+  // first page when the limit hit before any video arrived.
+  const retryPlatform = useCallback(
+    platform => {
+      const platformState = pagination[platform];
+      const searchQuery = platformState.resolvedQuery || query;
+      if (!searchQuery || loading) return;
+
+      const isLoadMore = Boolean(platformState.cursor);
+      lastLoadMoreAtRef.current[platform] = Date.now();
+
+      fetchPlatformVideos({
+        searchQuery,
+        platform,
+        cursorValue: platformState.cursor,
+        isLoadMore,
+        limit: isLoadMore && expandedPlatform === null ? MINIMIZED_LOAD_MORE_PAGE_SIZE : EXPANDED_PAGE_SIZE_PER_PLATFORM,
+      });
+    },
+    [expandedPlatform, fetchPlatformVideos, loading, pagination, query]
+  );
+
+  const rememberSearchForLogin = useCallback(() => {
+    try {
+      sessionStorage.setItem(RESUME_SEARCH_KEY, query);
+    } catch {
+      // Storage is blocked: the user just searches again after logging in.
+    }
+  }, [query]);
+
+  // Back from logging in through the limit card: run that search again.
+  useEffect(() => {
+    if (authLoading || !user) return;
+
+    let savedQuery = null;
+
+    try {
+      savedQuery = sessionStorage.getItem(RESUME_SEARCH_KEY);
+      sessionStorage.removeItem(RESUME_SEARCH_KEY);
+    } catch {
+      return;
+    }
+
+    if (savedQuery) {
+      setSearchInput(savedQuery);
+      runSearch(savedQuery);
+    }
+  }, [authLoading, user, runSearch]);
+
   useEffect(() => {
     loadMoreIfAtEndRef.current = platform => {
       if (expandedPlatform === platform) {
@@ -433,6 +534,21 @@ function Home() {
     const platforms = expandedPlatform ? [expandedPlatform] : SUPPORTED_PLATFORMS;
     platforms.forEach(platform => loadMoreIfAtEndRef.current(platform));
   }, [loading, expandedPlatform, videosByPlatform]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    ppi
+      .get("/api/v1/videos/trending")
+      .then(response => {
+        if (!cancelled) setTrendingByPlatform(response.data.data.byPlatform);
+      })
+      .catch(requestError => console.error("Could not load trending videos", requestError));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Leaving the page cancels pending delayed loads.
   useEffect(() => resetLoadMoreRateLimit, [resetLoadMoreRateLimit]);
@@ -474,7 +590,32 @@ function Home() {
   };
 
   const hasAnyVideos = videosByPlatform.youtube.length + videosByPlatform.dailymotion.length > 0;
+  // A platform stopped by a limit still gets its section (with the card), even with no videos.
+  const hasResultsToShow = hasAnyVideos || SUPPORTED_PLATFORMS.some(platform => isStoppedByLimit(pagination[platform]));
   const activePlatformState = expandedPlatform ? pagination[expandedPlatform] : null;
+
+  const renderLimitCard = (platform, className) => {
+    const platformState = pagination[platform];
+    if (!isStoppedByLimit(platformState)) return null;
+
+    const otherPlatform = SUPPORTED_PLATFORMS.find(current => current !== platform);
+
+    return (
+      <QuotaLimitCard
+        platformName={PLATFORM_NAMES[platform]}
+        reason={platformState.terminalReason}
+        retryAt={platformState.retryAt}
+        viewer={platformState.viewer || (user ? "user" : "anonymous")}
+        otherPlatformNote={
+          videosByPlatform[otherPlatform].length ? `${PLATFORM_NAMES[otherPlatform]} results are still here.` : null
+        }
+        onRetry={() => retryPlatform(platform)}
+        onLogin={rememberSearchForLogin}
+        disabled={loading}
+        className={className}
+      />
+    );
+  };
 
   if (authLoading) {
     return <div className="text-center py-10">Loading...</div>;
@@ -498,6 +639,17 @@ function Home() {
           onSearchInputChange={event => setSearchInput(event.target.value)}
         />
 
+        {/* YouTube's Developer Policies (III.A.2) ask users to agree to the privacy policy before using the features. */}
+        <p className="text-center text-xs text-white/40 mt-3">
+          By using Video Treasure, you agree to our{" "}
+          <Link to="/terms" className="underline hover:text-white">Terms of Service</Link>, the{" "}
+          <a href={YOUTUBE_TERMS_URL} target="_blank" rel="noopener" className="underline hover:text-white">
+            YouTube Terms of Service
+          </a>{" "}
+          and our{" "}
+          <Link to="/privacy" className="underline hover:text-white">Privacy Policy</Link>.
+        </p>
+
         {searchNotice && (
           <p className="text-center text-white/70 mt-6">
             Showing results for <span className="font-semibold text-white">"{searchNotice.resolved}"</span>.{" "}
@@ -514,11 +666,30 @@ function Home() {
 
         {error && <p className="text-center text-red-400 mt-8">{error}</p>}
 
-        {!loading && !error && hasSearched && !hasAnyVideos && (
+        {!hasSearched && trendingByPlatform && SUPPORTED_PLATFORMS.some(platform => trendingByPlatform[platform]?.length) && (
+          <section className="mt-12" aria-label="Trending in India">
+            <h2 className="text-2xl sm:text-3xl font-extrabold">
+              <span className="bg-gradient-to-r from-purple-400 to-pink-600 text-transparent bg-clip-text">Trending in India</span>
+            </h2>
+            {SUPPORTED_PLATFORMS.map(platform => (
+              <HorizontalSection
+                key={platform}
+                title={PLATFORM_NAMES[platform]}
+                heading={<h3 className="text-xl font-bold tracking-wide uppercase text-white/90">{PLATFORM_NAMES[platform]}</h3>}
+                videos={trendingByPlatform[platform] || []}
+                containerRef={trendingRailRefs[platform]}
+                onScrollLeft={() => scrollRailBy(trendingRailRefs[platform], -900)}
+                onScrollRight={() => scrollRailBy(trendingRailRefs[platform], 900)}
+              />
+            ))}
+          </section>
+        )}
+
+        {!loading && !error && hasSearched && !hasResultsToShow && (
           <p className="text-center text-white/50 mt-8">No videos found. Try a different search.</p>
         )}
 
-        {hasAnyVideos && expandedPlatform === null && (
+        {hasResultsToShow && expandedPlatform === null && (
           <>
             <HorizontalSection
               title="YouTube"
@@ -528,6 +699,7 @@ function Home() {
               onScrollRight={() => scrollRailBy(youtubeRailRef, 900)}
               expandedPlatform={expandedPlatform}
               onToggleExpand={() => toggleExpand("youtube")}
+              footer={renderLimitCard("youtube", "min-w-[320px] max-w-[320px]")}
             />
 
             <HorizontalSection
@@ -538,11 +710,12 @@ function Home() {
               onScrollRight={() => scrollRailBy(dailymotionRailRef, 900)}
               expandedPlatform={expandedPlatform}
               onToggleExpand={() => toggleExpand("dailymotion")}
+              footer={renderLimitCard("dailymotion", "min-w-[320px] max-w-[320px]")}
             />
           </>
         )}
 
-        {hasAnyVideos && expandedPlatform === "youtube" && (
+        {hasResultsToShow && expandedPlatform === "youtube" && (
           <ExpandedGridSection
             title="YouTube"
             videos={videosByPlatform.youtube}
@@ -551,7 +724,7 @@ function Home() {
           />
         )}
 
-        {hasAnyVideos && expandedPlatform === "dailymotion" && (
+        {hasResultsToShow && expandedPlatform === "dailymotion" && (
           <ExpandedGridSection
             title="Dailymotion"
             videos={videosByPlatform.dailymotion}
@@ -562,13 +735,14 @@ function Home() {
 
         {expandedPlatform && <div ref={loadMoreNodeRef} className="h-4" />}
 
-        {!loading && hasSearched && expandedPlatform && activePlatformState && !activePlatformState.hasMore && (
-          <p className="text-center text-white/70 mt-8">
-            {activePlatformState.terminalReason === "rate_limit_hit"
-              ? "API rate limit hit for this platform."
-              : "All videos are here."}
-          </p>
-        )}
+        {!loading &&
+          hasSearched &&
+          expandedPlatform &&
+          activePlatformState &&
+          !activePlatformState.hasMore &&
+          (renderLimitCard(expandedPlatform, "mt-8 w-full max-w-md mx-auto") || (
+            <p className="text-center text-white/70 mt-8">All videos are here.</p>
+          ))}
       </main>
     </div>
   );

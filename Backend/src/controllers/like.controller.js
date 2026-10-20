@@ -1,42 +1,13 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Like } from "../models/like.model.js";
-import { Video } from "../models/video.model.js";
+import { findOrCreateVideo } from "../services/video.service.js";
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
-    const {
-        platform = "youtube",
-        platformVideoId,
-        title,
-        thumbnail,
-        channelTitle,
-        query = null,
-    } = req.body;
     const userId = req.user._id;
 
-    if (!platformVideoId) {
-        throw new ApiError(400, "platformVideoId is required");
-    }
-
-    // 1. Find or create the video in our database
-    let video = await Video.findOne({ platform, platformVideoId });
-    if (!video) {
-        // If the frontend doesn't provide all details, throw an error
-        if (!title || !thumbnail || !channelTitle) {
-            throw new ApiError(400, "Video details are required for the first like");
-        }
-        video = await Video.create({
-            platform,
-            platformVideoId,
-            title,
-            description: req.body.description || "",
-            thumbnail,
-            channelTitle,
-            query,
-            publishedAt: req.body.publishedAt || new Date(),
-        });
-    }
+    // 1. Find or create the video in our database (shared with playlists)
+    const video = await findOrCreateVideo(req.body);
 
     // 2. Check if the like already exists
     const existingLike = await Like.findOne({

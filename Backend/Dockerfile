@@ -1,21 +1,18 @@
+FROM node:22-alpine
 
-FROM node:18
 # Set the working directory inside the container
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json to the container
+# Install production dependencies from the lockfile first, so this layer is cached between code changes.
 COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Install app dependencies
-RUN npm install
-
-# Copy the rest of your backend source code
+# Copy the rest of the backend source code (.dockerignore keeps node_modules and .env out)
 COPY . .
 
-# IMPORTANT: Expose the port your app will run on
-# Railway provides a PORT environment variable, so your app must listen on that.
-# This line just documents it; your code must actually use process.env.PORT.
+# The API listens on PORT (8000 by default). The same image runs the worker with `node src/worker.js`
+# (see deploy/docker-compose.yml).
 EXPOSE 8000
 
-# Define the command to run your app
-CMD [ "npm", "start" ]
+# node directly rather than npm start, so `docker stop` signals reach the app.
+CMD [ "node", "src/index.js" ]

@@ -1,17 +1,46 @@
 import axios from "axios";
-import { canConsumeQuotaUnits, consumeQuotaUnits } from "../utils/quotaTracker.js";
+import { getNextResetTime, markBucketSpent, reserveQuota } from "../utils/quotaTracker.js";
+import { getStubResponse } from "./youtube.stub.js";
 
-const YOUTUBE_SEARCH_API = "https://www.googleapis.com/youtube/v3/search";
+const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
-const YOUTUBE_VIDEOS_API = "https://www.googleapis.com/youtube/v3/videos";
+// YOUTUBE_MODE=stub answers with canned results (see youtube.stub.js). A missing value means live, so
+// production keeps calling YouTube.
+const isStubMode = () => process.env.YOUTUBE_MODE === "stub";
 
-const YOUTUBE_SEARCH_COST_UNITS = 100;
-const YOUTUBE_VIDEOS_COST_UNITS = 1;
-
-const buildQuotaError = () => {
-  const error = new Error("YouTube quota budget reserved for users.");
+// Thrown when the day's quota (or the consumer's share of it) is used up. videoFetch.service.js returns it
+// as the response's terminal reason and leaves the search's QueryState alone.
+const buildDailyLimitError = retryAt => {
+  const error = new Error("YouTube's daily quota is used up.");
   error.response = { status: 429 };
+  error.quotaLimit = { reason: "daily_limit", retryAt };
   return error;
+};
+
+// Google lists the reasons in error.errors (and in error.details in newer responses).
+const isQuotaExceeded = error => {
+  const body = error.response?.data?.error;
+  const reasons = [...(body?.errors || []), ...(body?.details || [])].map(entry => entry.reason);
+  return error.response?.status === 403 && reasons.includes("quotaExceeded");
+};
+
+// One Data API call. The quota is reserved by the caller, before this runs, in stub mode too, so local runs
+// exercise the same limits.
+const callYouTube = async (method, params, bucket) => {
+  try {
+    if (isStubMode()) {
+      return { data: getStubResponse(method, params) };
+    }
+
+    return await axios.get(`${YOUTUBE_API}/${method}`, { params: { ...params, key: process.env.YOUTUBE_API_KEY } });
+  } catch (error) {
+    if (isQuotaExceeded(error)) {
+      await markBucketSpent(bucket);
+      throw buildDailyLimitError(getNextResetTime());
+    }
+
+    throw error;
+  }
 };
 
 // search.list returns HTML-escaped text ("Tom &amp; Jerry").
@@ -28,67 +57,120 @@ const parseDurationSeconds = isoDuration => {
   return ((days * 24 + hours) * 60 + minutes) * 60 + seconds;
 };
 
-const getStatisticsMap = async videoIds => {
+// One videos.list call (1 general unit, charged to `consumer`), by ids (up to 50) or by chart. Throws the
+// daily_limit error when the general bucket is used up.
+const listVideos = async (params, consumer) => {
+  const reservation = await reserveQuota({ bucket: "general", units: 1, consumer });
+
+  if (!reservation.ok) {
+    throw buildDailyLimitError(reservation.retryAt);
+  }
+
+  const response = await callYouTube("videos", { maxResults: 50, ...params }, "general");
+  return response.data.items || [];
+};
+
+const toStats = item => ({
+  views: Number(item.statistics?.viewCount) || 0,
+  likes: Number(item.statistics?.likeCount) || 0,
+  durationSeconds: parseDurationSeconds(item.contentDetails?.duration),
+});
+
+// A videos.list item in the Video shape. Unlike search.list, videos.list doesn't HTML-escape its text. Fields
+// missing from the item (no snippet part) stay undefined.
+const toVideoFromDetails = item => {
+  const { views, likes, durationSeconds } = toStats(item);
+
+  return {
+    platform: "youtube",
+    platformVideoId: item.id,
+    title: item.snippet?.title,
+    description: item.snippet?.description,
+    thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url,
+    channelTitle: item.snippet?.channelTitle,
+    publishedAt: item.snippet?.publishedAt,
+    views,
+    likes,
+    // Read by rankByRelevance; not stored.
+    rankingHints: { durationSeconds },
+  };
+};
+
+// Views, likes and duration feed the ranking, but the search call is already paid for by now. If the stats
+// call is denied or fails, the videos are still returned, with 0 views.
+const getStatisticsMap = async (videoIds, consumer) => {
   if (!videoIds.length) {
     return new Map();
   }
 
-  const response = await axios.get(YOUTUBE_VIDEOS_API, {
-    params: {
-      key: process.env.YOUTUBE_API_KEY,
-      part: "statistics,contentDetails",
-      id: videoIds.join(","),
-      maxResults: 50,
-    },
-  });
-
-  const statsMap = new Map();
-
-  for (const item of response.data.items || []) {
-    statsMap.set(item.id, {
-      views: Number(item.statistics?.viewCount) || 0,
-      likes: Number(item.statistics?.likeCount) || 0,
-      durationSeconds: parseDurationSeconds(item.contentDetails?.duration),
-    });
+  try {
+    const items = await listVideos({ part: "statistics,contentDetails", id: videoIds.join(",") }, consumer);
+    return new Map(items.map(item => [item.id, toStats(item)]));
+  } catch (error) {
+    console.log(`⚠️ [youtube] statistics call failed, keeping the results without stats: ${error.message}`);
+    return new Map();
   }
-
-  return statsMap;
 };
 
+/**
+ * Current details of up to 50 videos by id: one videos.list call (1 general unit). A video missing from the
+ * returned Map was deleted or made private. `embeddable: false` means the app can no longer play it.
+ */
+export const getYouTubeVideoDetails = async (videoIds, { consumer = "refresh" } = {}) => {
+  const items = await listVideos({ part: "snippet,statistics,contentDetails,status", id: videoIds.join(",") }, consumer);
+  return new Map(items.map(item => [item.id, { ...toVideoFromDetails(item), embeddable: item.status?.embeddable !== false }]));
+};
+
+/**
+ * YouTube's trending chart for a region (videos.list?chart=mostPopular): one call, 1 general unit, no search
+ * call. `videoCategoryId` narrows it to one category. Only embeddable videos are returned.
+ */
+export const getYouTubeChart = async ({ regionCode, videoCategoryId = null, consumer = "trendCrawler" }) => {
+  const items = await listVideos(
+    {
+      part: "snippet,statistics,contentDetails,status",
+      chart: "mostPopular",
+      regionCode,
+      ...(videoCategoryId && { videoCategoryId }),
+    },
+    consumer
+  );
+
+  return items.filter(item => item.status?.embeddable !== false).map(toVideoFromDetails);
+};
+
+/**
+ * One search.list call (one of the day's search calls, charged to `consumer`) plus one videos.list call for
+ * the stats (1 general unit). Throws the daily_limit error when the ledger denies the search call or YouTube
+ * says the quota is used up. `publishedAfter` (a Date) returns only newer videos; `regionCode` ("IN") only
+ * videos viewable in that country.
+ */
 export const searchYouTube = async (query, pageToken = null, options = {}) => {
+  const { maxResults = 12, consumer = "user", publishedAfter, regionCode } = options;
+
   const params = {
-    key: process.env.YOUTUBE_API_KEY,
     part: "snippet",
     q: query,
     type: "video",
     // The app plays everything in an embed, where a non-embeddable video only shows "Video unavailable".
     videoEmbeddable: "true",
-    maxResults: options.maxResults || 12,
+    maxResults,
   };
 
   if (pageToken) params.pageToken = pageToken;
+  if (publishedAfter) params.publishedAfter = new Date(publishedAfter).toISOString();
+  if (regionCode) params.regionCode = regionCode;
 
-  const estimatedUnits = YOUTUBE_SEARCH_COST_UNITS + YOUTUBE_VIDEOS_COST_UNITS;
+  const reservation = await reserveQuota({ bucket: "search", units: 1, consumer });
 
-  if (!canConsumeQuotaUnits(estimatedUnits)) {
-    throw buildQuotaError();
+  if (!reservation.ok) {
+    throw buildDailyLimitError(reservation.retryAt);
   }
 
-  consumeQuotaUnits({ units: YOUTUBE_SEARCH_COST_UNITS, reason: "youtube.search" });
-  const response = await axios.get(YOUTUBE_SEARCH_API, { params });
+  const response = await callYouTube("search", params, "search");
   const items = response.data.items || [];
   const videoIds = items.map(item => item.id.videoId).filter(Boolean);
-
-  let statsMap = new Map();
-
-  if (videoIds.length > 0) {
-    if (!canConsumeQuotaUnits(YOUTUBE_VIDEOS_COST_UNITS)) {
-      throw buildQuotaError();
-    }
-
-    consumeQuotaUnits({ units: YOUTUBE_VIDEOS_COST_UNITS, reason: "youtube.videos.statistics" });
-    statsMap = await getStatisticsMap(videoIds);
-  }
+  const statsMap = await getStatisticsMap(videoIds, consumer);
 
   const videos = items.map(item => {
     const id = item.id.videoId;

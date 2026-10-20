@@ -82,4 +82,7 @@ videoSchema.index(
 // Search results are paged in this order.
 videoSchema.index({ query: 1, searchRank: 1, _id: 1 });
 
+// The 30-day refresh job looks for the stalest YouTube rows (services/videoRefresh.service.js).
+videoSchema.index({ platform: 1, fetchedAt: 1 });
+
 export const Video = mongoose.model("Video", videoSchema);

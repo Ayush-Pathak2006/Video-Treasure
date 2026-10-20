@@ -1,16 +1,16 @@
 import { NICHE_TOPICS, getCombinedNicheQuery } from "../config/niches.config.js";
 
 // Lowercase with single spaces, so "  Machine   LEARNING " and "machine learning" are the same search.
-const normalize = value => (value || "").trim().toLowerCase().replace(/\s+/g, " ");
+export const normalizeSearchText = value => (value || "").trim().toLowerCase().replace(/\s+/g, " ");
 
 export const resolveSearchIntent = rawQuery => {
-  const input = normalize(rawQuery);
+  const input = normalizeSearchText(rawQuery);
 
   // Only a search that IS a niche name or alias maps to the niche. Matching words inside a search
   // hijacked specific searches ("guitar lessons" contains "ui", "python coding interview" contains "coding").
   const matchedNiche = NICHE_TOPICS.find(niche => {
     const terms = [niche.name, ...(Array.isArray(niche.aliases) ? niche.aliases : [])];
-    return terms.some(term => normalize(term) === input);
+    return terms.some(term => normalizeSearchText(term) === input);
   });
 
   if (!matchedNiche) {
@@ -34,5 +34,5 @@ export const resolveSearchIntent = rawQuery => {
 // searches were normalized can still have capitals ("Guitar Lessons").
 export const resolveCachedSearchIntent = cacheKey => {
   const intent = resolveSearchIntent(cacheKey);
-  return intent.niche ? intent : { dbQuery: cacheKey, providerQuery: normalize(cacheKey), niche: null };
+  return intent.niche ? intent : { dbQuery: cacheKey, providerQuery: normalizeSearchText(cacheKey), niche: null };
 };

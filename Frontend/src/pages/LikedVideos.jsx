@@ -3,6 +3,7 @@ import Header from "../components/Header";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AppContext";
 import ppi from "../api/axios";
+import { SaveToPlaylistButton } from "../components/SaveToPlaylistDialog";
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
 
@@ -18,7 +19,7 @@ const LikedVideoCard = ({ video, onUnlike }) => {
 
   return (
     <div className="bg-white/5 p-4 rounded-xl border border-white/10 shadow-lg relative">
-      <Link to={`/watch/${video.platform}/${video.platformVideoId}`} className="block">
+      <Link to={`/watch/${video.platform}/${video.platformVideoId}`} state={{ video }} className="block">
         <div className="relative mb-4 aspect-video rounded-lg overflow-hidden">
           <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />
           <span className="absolute top-2 left-2 text-xs px-2 py-1 rounded-full bg-black/70">
@@ -28,11 +29,14 @@ const LikedVideoCard = ({ video, onUnlike }) => {
         <h3 className="text-lg font-bold text-white truncate">{video.title}</h3>
         <p className="text-sm text-white/60">{video.channelTitle}</p>
       </Link>
-      <button onClick={handleUnlikeClick} className="absolute top-2 right-2 text-red-500 z-10">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 20.25l-7.682-7.682a4.5 4.5 0 010-6.364z" />
-        </svg>
-      </button>
+      <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+        <SaveToPlaylistButton video={video} className="p-1 rounded-full bg-black/20 text-white/80 hover:text-white transition-colors" />
+        <button onClick={handleUnlikeClick} className="text-red-500">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 20.25l-7.682-7.682a4.5 4.5 0 010-6.364z" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 };

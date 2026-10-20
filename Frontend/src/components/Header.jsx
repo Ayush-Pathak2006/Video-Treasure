@@ -20,6 +20,9 @@ function Header() {
                             <Link to="/liked-videos" className="text-white hover:text-purple-400 transition-colors">
                                 Liked Videos
                             </Link>
+                            <Link to="/playlists" className="text-white hover:text-purple-400 transition-colors">
+                                Playlists
+                            </Link>
                             <span className="text-white">Welcome, {user.fullName}!</span>
                             <button onClick={logout} className="bg-red-600/80 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors">
                                 Logout
@@ -53,6 +56,7 @@ function Header() {
                     {user ? (
                         <div className="flex flex-col items-center gap-4">
                             <Link to="/liked-videos" className="text-white block w-full text-center py-2" onClick={() => setIsOpen(false)}>Liked Videos</Link>
+                            <Link to="/playlists" className="text-white block w-full text-center py-2" onClick={() => setIsOpen(false)}>Playlists</Link>
                             <button onClick={logout} className="bg-red-600/80 text-white py-2 px-4 rounded-md w-full">Logout</button>
                         </div>
                     ) : (

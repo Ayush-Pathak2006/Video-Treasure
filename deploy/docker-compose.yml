@@ -1,0 +1,86 @@
+# Local demo of the target architecture: Nginx (load balancer + frontend), 3 API containers, 1 worker and
+# MongoDB. Production stays on Render (one process). See deploy/README.md.
+#
+#   cd deploy
+#   docker compose up --build        then open http://localhost:8080
+
+name: video-treasure-demo
+
+x-backend: &backend
+  build: ../Backend
+  environment: &backend-env
+    MONGODB_URI: mongodb://mongo:27017/video_treasure_demo
+    NODE_ENV: production
+    PORT: "8000"
+    CORS_ORIGIN: http://localhost:8080
+    FRONTEND_URL: http://localhost:8080
+    ACCESS_TOKEN_SECRET: demo-access-secret
+    ACCESS_TOKEN_EXPIRY: 15m
+    REFRESH_TOKEN_SECRET: demo-refresh-secret
+    REFRESH_TOKEN_EXPIRY: 10d
+    # Google login only works if http://localhost:8080/api/v1/auth/google/callback is registered in Google Cloud
+    # Console for these credentials. Without them, use email login with a demo user (see README.md).
+    GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-not-configured}
+    GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-not-configured}
+    BREVO_API_KEY: ${BREVO_API_KEY:-not-configured}
+    BREVO_SENDER_EMAIL: demo@example.com
+    BREVO_SENDER_NAME: Video Treasure demo
+    # Canned YouTube results: the demo never spends the real quota.
+    YOUTUBE_MODE: stub
+    # Nginx is the only proxy in front of the API.
+    TRUST_PROXY_HOPS: "1"
+    # The 3 API containers count each client's requests together.
+    RATE_LIMIT_STORE: mongo
+  depends_on:
+    mongo:
+      condition: service_healthy
+  restart: unless-stopped
+
+x-api: &api
+  <<: *backend
+  environment:
+    <<: *backend-env
+    # The worker runs the jobs and the startup migrations; the API containers only serve the API.
+    RUN_JOBS_IN_API: "false"
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/v1/test"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api1: *api
+  api2: *api
+  api3: *api
+
+  worker:
+    <<: *backend
+    command: ["node", "src/worker.js"]
+
+  nginx:
+    build:
+      context: ..
+      dockerfile: deploy/nginx/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+      api3:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mongo-data:

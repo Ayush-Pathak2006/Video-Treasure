@@ -1,6 +1,7 @@
 import { Video } from "../models/video.model.js";
 import { rankByRelevance } from "./videoRanking.js";
 import { resolveSearchIntent } from "./nicheResolver.js";
+import { TRENDING_KEY_PREFIX } from "../config/trends.config.js";
 
 // Rank of the first (direction 1) or last (direction -1) cached video of a search, or null when none is ranked yet.
 const getEdgeRank = async (query, direction) => {
@@ -26,10 +27,11 @@ export const assignSearchRanks = async (videos, query, { atStart = false } = {})
 };
 
 // Videos cached before searchRank existed are ranked once, at startup. Insert order (_id) is the order the
-// provider returned them in, so it stands in for their relevance position.
+// provider returned them in, so it stands in for their relevance position. Trending rows ("trending:in") are not
+// a search and stay unranked.
 export const ensureSearchRanks = async () => {
   const groups = await Video.aggregate([
-    { $match: { searchRank: null, query: { $ne: null } } },
+    { $match: { searchRank: null, query: { $ne: null, $not: new RegExp(`^${TRENDING_KEY_PREFIX}`) } } },
     { $group: { _id: { query: "$query", platform: "$platform" } } },
   ]);
 

@@ -30,6 +30,12 @@ const queryStateSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // YouTube's regionCode, set by whoever created the state (the trend crawler uses "IN") and sent with every
+    // refill of it, because a page token belongs to the query parameters that produced it.
+    regionCode: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

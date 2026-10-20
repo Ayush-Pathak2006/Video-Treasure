@@ -1,0 +1,7 @@
+# Build context of deploy/nginx/Dockerfile (the repo root): keep dependencies, builds and secrets out.
+**/node_modules
+**/dist
+**/.env
+**/.env.*.local
+.git
+.claude

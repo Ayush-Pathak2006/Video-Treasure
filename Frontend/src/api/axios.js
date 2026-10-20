@@ -34,6 +34,16 @@ export const setSessionExpiredHandler = handler => {
   handleSessionExpired = handler;
 };
 
+// Renews the session, or shows the user as logged out when it can't be renewed.
+export const renewSession = async () => {
+  try {
+    return await refreshSession();
+  } catch (error) {
+    handleSessionExpired();
+    throw error;
+  }
+};
+
 // The access token expires after 15 minutes. When a request gets a 401, renew the session
 // with the refresh token cookie and send the same request once more.
 axiosInstance.interceptors.response.use(
@@ -53,9 +63,8 @@ axiosInstance.interceptors.response.use(
     request.retriedAfterRefresh = true;
 
     try {
-      await refreshSession();
+      await renewSession();
     } catch {
-      handleSessionExpired();
       throw error;
     }
 

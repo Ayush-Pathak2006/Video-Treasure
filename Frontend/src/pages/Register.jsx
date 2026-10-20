@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ppi from '../api/axios';
+import { YOUTUBE_TERMS_URL } from '../config/site';
 
 function Register() {
   const navigate = useNavigate();
@@ -100,6 +101,16 @@ function Register() {
           >
             Register
           </button>
+
+          <p className="text-xs text-center text-gray-400">
+            By creating an account, you agree to our{' '}
+            <Link to="/terms" className="text-purple-400 hover:underline">Terms of Service</Link>, the{' '}
+            <a href={YOUTUBE_TERMS_URL} target="_blank" rel="noopener" className="text-purple-400 hover:underline">
+              YouTube Terms of Service
+            </a>{' '}
+            and our{' '}
+            <Link to="/privacy" className="text-purple-400 hover:underline">Privacy Policy</Link>.
+          </p>
         </form>
 
         <p className="text-sm text-center text-gray-400">
