@@ -5,7 +5,6 @@ import QuotaLimitCard from "../components/QuotaLimitCard";
 import { SaveToPlaylistButton } from "../components/SaveToPlaylistDialog";
 import { useAuth, useSearch } from "../context/AppContext";
 import ppi, { renewSession } from "../api/axios";
-import { YOUTUBE_TERMS_URL } from "../config/site";
 
 const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
 const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
@@ -638,17 +637,6 @@ function Home() {
           searchInput={searchInput}
           onSearchInputChange={event => setSearchInput(event.target.value)}
         />
-
-        {/* YouTube's Developer Policies (III.A.2) ask users to agree to the privacy policy before using the features. */}
-        <p className="text-center text-xs text-white/40 mt-3">
-          By using Video Treasure, you agree to our{" "}
-          <Link to="/terms" className="underline hover:text-white">Terms of Service</Link>, the{" "}
-          <a href={YOUTUBE_TERMS_URL} target="_blank" rel="noopener" className="underline hover:text-white">
-            YouTube Terms of Service
-          </a>{" "}
-          and our{" "}
-          <Link to="/privacy" className="underline hover:text-white">Privacy Policy</Link>.
-        </p>
 
         {searchNotice && (
           <p className="text-center text-white/70 mt-6">
