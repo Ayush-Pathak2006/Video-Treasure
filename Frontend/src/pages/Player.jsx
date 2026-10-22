@@ -101,7 +101,9 @@ function Player() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    // min-h-screen like every page: the footer comes after at least one screen, so a short page leaves no gap
+    // under it.
+    <div className="min-h-screen max-w-4xl mx-auto px-4 py-6">
       <Link to="/" className="inline-block mb-3 text-sm text-white/70 hover:text-white transition-colors">
         ← Back to search
       </Link>
