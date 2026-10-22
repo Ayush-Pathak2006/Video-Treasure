@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Like } from "../models/like.model.js";
 import { findOrCreateVideo } from "../services/video.service.js";
+import { buildVideoKey } from "../utils/videoKey.js";
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
     const userId = req.user._id;
@@ -55,6 +56,10 @@ const getLikedVideos = asyncHandler(async (req, res) => {
          { $sort: { createdAt: -1 } },
         {
             $replaceRoot: { newRoot: "$videoDetails" }
+        },
+        // No card shows the description; the Player loads it on its own.
+        {
+            $project: { description: 0 }
         }
     ]);
 
@@ -75,7 +80,7 @@ const getLikedVideoIds = asyncHandler(async (req, res) => {
     // Extract the platformVideoId from each liked video
     const likedVideoIds = likes
   .filter(like => like.video !== null) // 🔥 CRITICAL
-  .map(like => `${like.video.platform}:${like.video.platformVideoId}`);
+  .map(like => buildVideoKey(like.video));
 
     return res
         .status(200)

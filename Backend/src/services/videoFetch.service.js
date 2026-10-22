@@ -75,6 +75,9 @@ const runSharedRefill = async (leaseName, providerCall) => {
 
 // Best first. _id breaks ties: two platforms refilled at the same moment can get the same rank numbers.
 const SEARCH_ORDER = { searchRank: 1, _id: 1 };
+// Pages leave out the description: no card shows it, and a full YouTube description can run to 5,000 characters.
+// The Player loads it from GET /videos/:platform/:platformVideoId.
+const PAGE_FIELDS = "-description";
 
 // A query/platform exhausted by a temporary problem (quota, rate limit, access denied) may call the API
 // again after this cooldown. "all_videos_accessed" is permanent: the provider has no more pages.
@@ -395,7 +398,7 @@ export const fetchVideosByQuery = async ({
   const platformsToSearch = getPlatformsToSearch(platform);
   const filter = buildVideoFilter(query, decodedCursor, platform);
   const normalizedProviderQuery = providerQuery || query;
-  let videos = await Video.find(filter).sort(SEARCH_ORDER).limit(pageSize);
+  let videos = await Video.find(filter).sort(SEARCH_ORDER).limit(pageSize).select(PAGE_FIELDS);
 
   let statesByPlatform = {};
   let limitsByPlatform = {};
@@ -413,7 +416,7 @@ export const fetchVideosByQuery = async ({
       regionCode,
     }));
 
-    videos = await Video.find(filter).sort(SEARCH_ORDER).limit(pageSize);
+    videos = await Video.find(filter).sort(SEARCH_ORDER).limit(pageSize).select(PAGE_FIELDS);
   }
 
   const lastVideo = videos.at(-1);

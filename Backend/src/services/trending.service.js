@@ -8,7 +8,10 @@ const CATEGORY_ORDER = YOUTUBE_CHART_CATEGORIES.map(category => category.name);
  * are interleaved (the overall chart first) so the rail mixes music, gaming and film, without repeats.
  */
 export const getTrendingVideos = async platform => {
-  const snapshots = await TrendingSnapshot.find({ region: TREND_REGION, platform }).populate("videos").lean();
+  // No card shows the description; the Player loads it on its own.
+  const snapshots = await TrendingSnapshot.find({ region: TREND_REGION, platform })
+    .populate({ path: "videos", select: "-description" })
+    .lean();
 
   snapshots.sort((a, b) => {
     const rank = name => (CATEGORY_ORDER.includes(name) ? CATEGORY_ORDER.indexOf(name) : CATEGORY_ORDER.length);

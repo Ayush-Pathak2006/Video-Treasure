@@ -1,6 +1,45 @@
 import { Video } from "../models/video.model.js";
+import { Like } from "../models/like.model.js";
 import { SUPPORTED_PLATFORMS } from "../providers/provider.registry.js";
 import { ApiError } from "../utils/ApiError.js";
+
+const DETAIL_FIELDS = "platform platformVideoId title description thumbnail channelTitle publishedAt views likes fetchedAt";
+
+/**
+ * The Player's details for one platform video. `video` holds the platform's numbers (views, likes on YouTube);
+ * `appStats` holds Video Treasure's own, kept apart so nobody adds them together. Answers 404 when the video was
+ * never cached.
+ */
+export const loadVideoDetails = async ({ platform, platformVideoId, viewerId = null }) => {
+  // A video has a row per cache key.
+  const rows = await Video.find({ platform, platformVideoId }).select(DETAIL_FIELDS).lean();
+
+  if (!rows.length) {
+    throw new ApiError(404, "Video not found");
+  }
+
+  // The freshest row has the newest stats and, unlike search rows cached before full descriptions, the whole
+  // description. Rows without fetchedAt predate the field.
+  const freshest = rows.reduce((best, row) => ((row.fetchedAt ?? 0) > (best.fetchedAt ?? 0) ? row : best));
+  const { _id, ...video } = freshest;
+
+  // A user may have liked two rows of the same video, so the likes are counted by distinct user.
+  const [likeStats] = await Like.aggregate([
+    { $match: { video: { $in: rows.map(row => row._id) } } },
+    { $group: { _id: "$likedBy" } },
+    { $group: { _id: null, likes: { $sum: 1 }, likedByMe: { $max: { $eq: ["$_id", viewerId] } } } },
+  ]);
+
+  return {
+    video,
+    appStats: {
+      likes: likeStats?.likes ?? 0,
+      likedByMe: Boolean(viewerId && likeStats?.likedByMe),
+      // Comments aren't built yet.
+      comments: 0,
+    },
+  };
+};
 
 /**
  * A Video row for the whole video object the frontend posts when it likes or saves a video. Any cached row of

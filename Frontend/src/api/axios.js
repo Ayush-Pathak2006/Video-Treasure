@@ -44,6 +44,25 @@ export const renewSession = async () => {
   }
 };
 
+// Public routes that treat logged-in visitors differently (search, video details) don't fail with 401 on an
+// expired access token: they answer as for an anonymous visitor (`viewer: "anonymous"`). When the app has a user,
+// renew the session once and ask again. If the session is gone (AppContext then shows the user as logged out),
+// the anonymous answer stands.
+export const requestAsViewer = async (request, { loggedIn }) => {
+  const response = await request();
+
+  if (!loggedIn || response.data.data.viewer !== 'anonymous') {
+    return response;
+  }
+
+  try {
+    await renewSession();
+    return await request();
+  } catch {
+    return response;
+  }
+};
+
 // The access token expires after 15 minutes. When a request gets a 401, renew the session
 // with the refresh token cookie and send the same request once more.
 axiosInstance.interceptors.response.use(

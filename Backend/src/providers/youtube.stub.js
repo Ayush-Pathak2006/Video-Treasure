@@ -84,6 +84,22 @@ const buildChartSnippet = (videoId, index, { regionCode = "", videoCategoryId = 
   };
 };
 
+// A few lines with a link, so the Player's description box (clamping, "...more", links) can be tried locally.
+const buildStubDescription = videoId =>
+  [
+    `Full stub description of ${videoId}. YOUTUBE_MODE=stub, no YouTube quota was used.`,
+    "",
+    "In live mode this box shows the whole description from videos.list, line breaks included.",
+    "Links open in a new tab: https://developers.google.com/youtube/v3/docs/videos/list",
+    "",
+    "Descriptions longer than three lines are clamped until you press ...more.",
+  ].join("\n");
+
+// By id, a snippet holds only the description. Without a title, thumbnail or channel, toVideoFromDetails leaves
+// them undefined and the refresh job keeps the stored ones.
+const buildIdSnippet = (videoId, params) =>
+  String(params.part || "").split(",").includes("snippet") ? { snippet: { description: buildStubDescription(videoId) } } : {};
+
 const buildVideosList = params => ({
   kind: "youtube#videoListResponse",
   items: (params.chart ? buildChartIds(params) : (params.id || "").split(",").filter(Boolean))
@@ -97,7 +113,7 @@ const buildVideosList = params => ({
         statistics: { viewCount: String(seed % 5000000), likeCount: String(seed % 90000) },
         contentDetails: { duration: `PT${Math.floor(durationSeconds / 60)}M${durationSeconds % 60}S` },
         status: { embeddable: true, privacyStatus: "public" },
-        ...(params.chart && { snippet: buildChartSnippet(videoId, index, params) }),
+        ...(params.chart ? { snippet: buildChartSnippet(videoId, index, params) } : buildIdSnippet(videoId, params)),
       };
     }),
 });

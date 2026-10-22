@@ -9,6 +9,8 @@ import { normalizeSearchText, resolveCachedSearchIntent, resolveSearchIntent } f
 import { findSimilarCachedSearch } from "../utils/similarSearch.js";
 import { buildSpender } from "../utils/spendMeter.js";
 import { recordSearchEvent } from "../utils/searchLog.js";
+import { validateVideoIdentity } from "../utils/videoKey.js";
+import { loadVideoDetails } from "../services/video.service.js";
 
 const MIN_QUERY_LENGTH = 2;
 const MAX_QUERY_LENGTH = 100;
@@ -113,4 +115,23 @@ const getTrendingVideos = asyncHandler(async (req, res) => {
   );
 });
 
-export { searchVideos, getTrendingVideos };
+// GET /videos/:platform/:platformVideoId, for the Player. Public; a logged-in viewer also learns whether they
+// liked the video.
+const getVideoDetails = asyncHandler(async (req, res) => {
+  const { platform, platformVideoId } = validateVideoIdentity(req.params);
+  const details = await loadVideoDetails({ platform, platformVideoId, viewerId: req.user?._id ?? null });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        ...details,
+        // As in search: "anonymous" while AppContext has a user means the access token expired.
+        viewer: req.user ? "user" : "anonymous",
+      },
+      "Video details fetched successfully"
+    )
+  );
+});
+
+export { searchVideos, getTrendingVideos, getVideoDetails };

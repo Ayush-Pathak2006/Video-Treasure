@@ -96,18 +96,20 @@ const toVideoFromDetails = item => {
   };
 };
 
-// Views, likes and duration feed the ranking, but the search call is already paid for by now. If the stats
-// call is denied or fails, the videos are still returned, with 0 views.
-const getStatisticsMap = async (videoIds, consumer) => {
+// Views, likes and duration feed the ranking, and the full description replaces search.list's ~160-character
+// snippet. Asking for the snippet part costs nothing extra: videos.list is 1 general unit whatever `part` is. The
+// search call is already paid for by now, so if this call is denied or fails, the videos are still returned, with
+// the short description and 0 views.
+const getDetailsMap = async (videoIds, consumer) => {
   if (!videoIds.length) {
     return new Map();
   }
 
   try {
-    const items = await listVideos({ part: "statistics,contentDetails", id: videoIds.join(",") }, consumer);
-    return new Map(items.map(item => [item.id, toStats(item)]));
+    const items = await listVideos({ part: "snippet,statistics,contentDetails", id: videoIds.join(",") }, consumer);
+    return new Map(items.map(item => [item.id, { ...toStats(item), description: item.snippet?.description }]));
   } catch (error) {
-    console.log(`⚠️ [youtube] statistics call failed, keeping the results without stats: ${error.message}`);
+    console.log(`⚠️ [youtube] details call failed, keeping the results without stats: ${error.message}`);
     return new Map();
   }
 };
@@ -141,7 +143,7 @@ export const getYouTubeChart = async ({ regionCode, videoCategoryId = null, cons
 
 /**
  * One search.list call (one of the day's search calls, charged to `consumer`) plus one videos.list call for
- * the stats (1 general unit). Throws the daily_limit error when the ledger denies the search call or YouTube
+ * the stats and full descriptions (1 general unit). Throws the daily_limit error when the ledger denies the search call or YouTube
  * says the quota is used up. `publishedAfter` (a Date) returns only newer videos; `regionCode` ("IN") only
  * videos viewable in that country.
  */
@@ -170,25 +172,26 @@ export const searchYouTube = async (query, pageToken = null, options = {}) => {
   const response = await callYouTube("search", params, "search");
   const items = response.data.items || [];
   const videoIds = items.map(item => item.id.videoId).filter(Boolean);
-  const statsMap = await getStatisticsMap(videoIds, consumer);
+  const detailsMap = await getDetailsMap(videoIds, consumer);
 
   const videos = items.map(item => {
     const id = item.id.videoId;
-    const stats = statsMap.get(id) || { views: 0, likes: 0, durationSeconds: null };
+    const details = detailsMap.get(id) || { views: 0, likes: 0, durationSeconds: null };
 
     return {
       platform: "youtube",
       platformVideoId: id,
       query,
       title: decodeHtmlEntities(item.snippet.title),
-      description: decodeHtmlEntities(item.snippet.description),
+      // videos.list text isn't HTML-escaped, so only the search snippet is decoded.
+      description: details.description ?? decodeHtmlEntities(item.snippet.description),
       thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default?.url,
       channelTitle: decodeHtmlEntities(item.snippet.channelTitle),
       publishedAt: item.snippet.publishedAt,
-      views: stats.views,
-      likes: stats.likes,
+      views: details.views,
+      likes: details.likes,
       // Read by rankByRelevance; not stored.
-      rankingHints: { durationSeconds: stats.durationSeconds },
+      rankingHints: { durationSeconds: details.durationSeconds },
     };
   });
 

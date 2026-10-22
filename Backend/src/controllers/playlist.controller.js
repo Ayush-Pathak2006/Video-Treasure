@@ -6,23 +6,13 @@ import { Playlist } from "../models/playlist.model.js";
 import { PlaylistItem } from "../models/playlistItem.model.js";
 import { findOrCreateVideo } from "../services/video.service.js";
 import { refreshPlaylistSummary } from "../services/playlist.service.js";
+import { parseVideoKey } from "../utils/videoKey.js";
 
 // Abuse limits.
 const MAX_PLAYLISTS_PER_USER = 100;
 const MAX_VIDEOS_PER_PLAYLIST = 1000;
 const MAX_NAME_LENGTH = 100;
 const MAX_DESCRIPTION_LENGTH = 500;
-
-// "youtube:dQw4w9WgXcQ" -> { platform, platformVideoId }. The id itself may contain ":".
-const parseVideoKey = videoKey => {
-  const separator = String(videoKey).indexOf(":");
-
-  if (separator <= 0 || separator === videoKey.length - 1) {
-    throw new ApiError(400, "Invalid video key");
-  }
-
-  return { platform: videoKey.slice(0, separator), platformVideoId: videoKey.slice(separator + 1) };
-};
 
 // The user's own playlist. Someone else's answers 404 like a missing one, so playlist ids don't leak.
 const findOwnPlaylist = async (playlistId, userId) => {
@@ -95,7 +85,11 @@ const getPlaylistsContainingVideo = asyncHandler(async (req, res) => {
 
 const getPlaylistById = asyncHandler(async (req, res) => {
   const playlist = await findOwnPlaylist(req.params.playlistId, req.user._id);
-  const items = await PlaylistItem.find({ playlist: playlist._id }).sort({ position: 1, _id: 1 }).populate("video").lean();
+  // No card shows the description; the Player loads it on its own.
+  const items = await PlaylistItem.find({ playlist: playlist._id })
+    .sort({ position: 1, _id: 1 })
+    .populate({ path: "video", select: "-description" })
+    .lean();
 
   return res.status(200).json(
     new ApiResponse(

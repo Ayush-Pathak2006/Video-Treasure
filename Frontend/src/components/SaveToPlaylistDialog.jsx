@@ -1,30 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
 import { useAuth } from "../context/AppContext";
 import ppi from "../api/axios";
+import LoginPrompt from "./LoginPrompt";
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
 
 const primaryButtonClass =
   "inline-flex items-center justify-center px-5 py-2 rounded-full font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 transition-colors disabled:opacity-50";
-const secondaryButtonClass =
-  "inline-flex items-center justify-center px-5 py-2 rounded-full font-semibold text-white bg-white/10 border border-white/20 hover:bg-white/20 transition-colors";
-
-// Anonymous visitors see this instead of their (non-existent) playlists.
-const LoginPrompt = () => (
-  <div className="space-y-4">
-    <p className="text-white/80">Log in to save videos to your playlists.</p>
-    <div className="flex flex-wrap gap-3">
-      <Link to="/login" className={primaryButtonClass}>
-        Log in
-      </Link>
-      <Link to="/register" className={secondaryButtonClass}>
-        Sign up
-      </Link>
-    </div>
-  </div>
-);
 
 /**
  * Checkboxes for the user's playlists (checked = the video is in it) and an inline "New playlist" field. Each
@@ -148,7 +131,8 @@ function SaveToPlaylistDialog({ video, onClose }) {
         </div>
 
         {!user ? (
-          <LoginPrompt />
+          // Anonymous visitors see this instead of their (non-existent) playlists.
+          <LoginPrompt message="Log in to save videos to your playlists." />
         ) : loading ? (
           <p className="text-white/60">Loading your playlists…</p>
         ) : (

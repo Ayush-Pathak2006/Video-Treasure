@@ -4,7 +4,7 @@ import Header from "../components/Header";
 import QuotaLimitCard from "../components/QuotaLimitCard";
 import { SaveToPlaylistButton } from "../components/SaveToPlaylistDialog";
 import { useAuth, useSearch } from "../context/AppContext";
-import ppi, { renewSession } from "../api/axios";
+import ppi, { requestAsViewer } from "../api/axios";
 
 const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
 const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
@@ -315,18 +315,9 @@ function Home() {
             },
           });
 
-        let response = await requestPage();
-
-        // Search is public, so an expired access token doesn't fail with 401: it just counts as anonymous.
-        // Renew the session once and ask again, so a logged-in user keeps the logged-in limits.
-        if (user && response.data.data.viewer === "anonymous") {
-          try {
-            await renewSession();
-            response = await requestPage();
-          } catch {
-            // The session is gone (AppContext now shows the user as logged out), so the anonymous answer stands.
-          }
-        }
+        // An expired access token counts as anonymous here, so a logged-in user renews and asks again to keep
+        // the logged-in limits.
+        const response = await requestAsViewer(requestPage, { loggedIn: Boolean(user) });
 
         const {
           videos: newVideos,
