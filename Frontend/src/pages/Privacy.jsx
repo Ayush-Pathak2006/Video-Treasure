@@ -36,41 +36,43 @@ function Privacy() {
       <ul>
         <li>
           <strong>Your account.</strong> Your name, username and email address. With email sign-up, your password is
-          stored only as a one-way hash. With Google sign-in, we receive your name, email address and Google account
+          never stored in readable form. With Google sign-in, we receive your name, email address and Google account
           id. We don&apos;t get access to your YouTube account or any other Google data.
         </li>
         <li>
-          <strong>Your session.</strong> Two cookies that keep you logged in. They can&apos;t be read by scripts on the
-          page and are cleared when you log out.
+          <strong>Your session.</strong> Cookies that keep you logged in. They are removed when you log out.
         </li>
         <li>
           <strong>Your likes and playlists.</strong> The videos you like and the playlists you create. Playlists are
           private: only you can see them.
         </li>
         <li>
-          <strong>Public video information.</strong> To keep searches fast and within YouTube&apos;s limits, we keep a
-          shared copy of public video details: titles, descriptions, thumbnails, channel names, and view and like
-          counts. YouTube data is refreshed or deleted within 30 days. Videos that are deleted, made private or can no
-          longer be embedded are removed, along with likes and playlist entries that point to them.
+          <strong>Public video information.</strong> We keep a copy of public details of the videos shown on the site,
+          such as titles, descriptions, thumbnails, channel names and view counts. YouTube information is refreshed
+          regularly, as YouTube&apos;s policies require, and videos that are no longer available are removed together
+          with any likes or playlist entries for them.
         </li>
         <li>
-          <strong>Fair-use limits.</strong> To stop one visitor from using up everyone&apos;s YouTube searches, we count
-          searches per account or, if you aren&apos;t logged in, per IP address. These counters are deleted after 2 days
-          without use.
+          <strong>Keeping the service fair.</strong> To protect the site from abuse, we use your account or, if you
+          aren&apos;t logged in, your IP address to limit how often some features can be used. This information is kept
+          only for a short time.
         </li>
         <li>
-          <strong>Search activity.</strong> To spot trending topics, we record first-page searches with the search text
-          and a one-way hash of your IP address, never the address itself. These records are deleted after 7 days.
+          <strong>Search activity.</strong> To find trending topics, we keep the searches made on the site for up to 7
+          days, together with a code derived from your IP address (never the address itself).
         </li>
         <li>
           <strong>Server logs.</strong> Our hosting providers keep technical logs that can include IP addresses.
         </li>
         <li>
-          <strong>Your browser.</strong> If you choose to log in from a search, your browser remembers that search for
-          the current tab, so it can run again after you log in.
+          <strong>Your browser.</strong> The site may save small pieces of information in your browser, such as a search
+          you started before logging in, so it can pick up where you left off.
         </li>
       </ul>
-      <p>We don&apos;t show ads, sell your data, or use tracking cookies of our own.</p>
+      <p>
+        We don&apos;t sell your data, show ads of our own, or use tracking cookies of our own. The YouTube and Dailymotion
+        players are run by those companies and may show their own ads and set their own cookies.
+      </p>
 
       <h2>Services we use</h2>
       <ul>
@@ -88,7 +90,7 @@ function Privacy() {
           </a>
           ).
         </li>
-        <li>Render and Vercel host the site, MongoDB Atlas stores the data, and Brevo sends account emails.</li>
+        <li>Hosting, database and email providers that run the site and send account emails for us.</li>
       </ul>
 
       <h2>Your choices</h2>

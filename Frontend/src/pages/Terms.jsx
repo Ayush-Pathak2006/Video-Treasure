@@ -34,12 +34,9 @@ function Terms() {
 
       <h2>Fair use</h2>
       <ul>
+        <li>To keep {SITE_NAME} available for everyone, we may limit how often some features can be used.</li>
         <li>
-          YouTube gives {SITE_NAME} a small daily allowance of searches, shared by everyone. To keep it fair, the number
-          of new YouTube searches per visitor is limited. Logged-in users get more.
-        </li>
-        <li>
-          Don&apos;t scrape the site, send automated requests, or try to get around the limits. We may block access
+          Don&apos;t scrape the site, send automated requests, or try to get around these limits. We may block access
           that does.
         </li>
       </ul>
