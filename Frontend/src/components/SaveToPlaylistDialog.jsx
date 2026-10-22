@@ -14,7 +14,7 @@ const primaryButtonClass =
  * change is saved right away. Rendered into document.body: the cards it opens from use CSS transforms, which
  * would trap a fixed overlay inside the card.
  */
-function SaveToPlaylistDialog({ video, onClose }) {
+function SaveToPlaylistDialog({ video, onClose, returnTo = null }) {
   const { user } = useAuth();
   const [playlists, setPlaylists] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -132,7 +132,7 @@ function SaveToPlaylistDialog({ video, onClose }) {
 
         {!user ? (
           // Anonymous visitors see this instead of their (non-existent) playlists.
-          <LoginPrompt message="Log in to save videos to your playlists." />
+          <LoginPrompt message="Log in to save videos to your playlists." returnTo={returnTo} />
         ) : loading ? (
           <p className="text-white/60">Loading your playlists…</p>
         ) : (
@@ -185,8 +185,9 @@ function SaveToPlaylistDialog({ video, onClose }) {
   );
 }
 
-// "Save" button that opens the dialog. Shown to everyone; anonymous visitors get the login prompt.
-export function SaveToPlaylistButton({ video, className = "", label = false }) {
+// "Save" button that opens the dialog. Shown to everyone; anonymous visitors get the login prompt, which brings them
+// back to `returnTo` (a path) after logging in when it's set.
+export function SaveToPlaylistButton({ video, className = "", label = false, returnTo = null }) {
   const [open, setOpen] = useState(false);
 
   const handleClick = event => {
@@ -203,7 +204,7 @@ export function SaveToPlaylistButton({ video, className = "", label = false }) {
         </svg>
         {label && <span>Save</span>}
       </button>
-      {open && <SaveToPlaylistDialog video={video} onClose={() => setOpen(false)} />}
+      {open && <SaveToPlaylistDialog video={video} onClose={() => setOpen(false)} returnTo={returnTo} />}
     </>
   );
 }

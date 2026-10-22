@@ -1,10 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Header from "../components/Header";
 import QuotaLimitCard from "../components/QuotaLimitCard";
 import { SaveToPlaylistButton } from "../components/SaveToPlaylistDialog";
 import { useAuth, useSearch } from "../context/AppContext";
 import ppi, { requestAsViewer } from "../api/axios";
+import { rememberSearch, takeReturnTo, takeSavedSearch } from "../utils/afterLogin";
 
 const INITIAL_PAGE_SIZE_PER_PLATFORM = 4;
 const EXPANDED_PAGE_SIZE_PER_PLATFORM = 4;
@@ -15,10 +16,6 @@ const PLATFORM_NAMES = { youtube: "YouTube", dailymotion: "Dailymotion" };
 // Terminal reasons that mean "the API isn't being called right now", not "there are no more videos".
 // The limit card shows them, with retryAt.
 const LIMIT_REASONS = new Set(["visitor_limit", "daily_limit", "rate_limit_hit", "api_access_denied"]);
-
-// The search to run again after logging in from the limit card. sessionStorage survives Google login's
-// full-page redirect.
-const RESUME_SEARCH_KEY = "videoTreasure.resumeSearch";
 
 const createPlatformPagination = () => ({
   cursor: null,
@@ -212,6 +209,7 @@ const ExpandedGridSection = ({ title, videos, expandedPlatform, onToggleExpand }
 );
 
 function Home() {
+  const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { query, setQuery, setVideos } = useSearch();
 
@@ -464,32 +462,26 @@ function Home() {
     [expandedPlatform, fetchPlatformVideos, loading, pagination, query]
   );
 
-  const rememberSearchForLogin = useCallback(() => {
-    try {
-      sessionStorage.setItem(RESUME_SEARCH_KEY, query);
-    } catch {
-      // Storage is blocked: the user just searches again after logging in.
-    }
-  }, [query]);
+  // The search to run again after logging in from the limit card (see utils/afterLogin.js).
+  const rememberSearchForLogin = useCallback(() => rememberSearch(query), [query]);
 
-  // Back from logging in through the limit card: run that search again.
+  // Back from logging in. Google login always lands here, so a visitor who logged in from the Player goes back to that
+  // video. One who logged in through the limit card gets that search again.
   useEffect(() => {
     if (authLoading || !user) return;
 
-    let savedQuery = null;
-
-    try {
-      savedQuery = sessionStorage.getItem(RESUME_SEARCH_KEY);
-      sessionStorage.removeItem(RESUME_SEARCH_KEY);
-    } catch {
+    const returnTo = takeReturnTo();
+    if (returnTo) {
+      navigate(returnTo, { replace: true });
       return;
     }
 
+    const savedQuery = takeSavedSearch();
     if (savedQuery) {
       setSearchInput(savedQuery);
       runSearch(savedQuery);
     }
-  }, [authLoading, user, runSearch]);
+  }, [authLoading, user, runSearch, navigate]);
 
   useEffect(() => {
     loadMoreIfAtEndRef.current = platform => {

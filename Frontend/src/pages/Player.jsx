@@ -5,6 +5,7 @@ import ppi, { requestAsViewer } from "../api/axios";
 import { SaveToPlaylistButton } from "../components/SaveToPlaylistDialog";
 import LoginPrompt from "../components/LoginPrompt";
 import VideoDescription from "../components/VideoDescription";
+import CommentSection from "../components/comments/CommentSection";
 import { formatCount } from "../utils/format";
 
 const pillClass = "inline-flex items-center gap-2 rounded-full px-4 py-2 font-semibold border transition";
@@ -35,18 +36,18 @@ function Player() {
   const { user, loading: authLoading, likedVideoIds, toggleLike } = useAuth();
   const { videos } = useSearch();
   const location = useLocation();
-  // { video, appStats } from the details endpoint, null until it arrives (and for a video we don't have).
-  const [details, setDetails] = useState(null);
+  // The last answer of the details endpoint: { key, status: "ready" | "missing" | "failed", data: { video, appStats } }.
+  const [detailsResult, setDetailsResult] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const embedUrl = buildEmbedUrl(platform, id);
   const title =
     platform === "dailymotion" ? "Dailymotion video player" : "YouTube video player";
   const userId = user?._id;
+  const videoKey = `${platform}:${id}`;
 
   // Our like count depends on who asks (likedByMe), so the details are loaded once the session check is done, and
   // again when the user logs in or out. A 404 (a video we never cached) or a failed request keeps what the router
-  // state gave: placeholders at worst, no description box, no error page. Details of the previous video are never
-  // shown for this one (see detailsVideo below).
+  // state gave: placeholders at worst, no description box, no error page. A failed refresh keeps earlier details.
   useEffect(() => {
     if (authLoading) return undefined;
     let cancelled = false;
@@ -55,14 +56,28 @@ function Player() {
 
     requestAsViewer(requestDetails, { loggedIn: Boolean(userId) })
       .then(response => {
-        if (!cancelled) setDetails(response.data.data);
+        if (!cancelled) setDetailsResult({ key: videoKey, status: "ready", data: response.data.data });
       })
-      .catch(() => {});
+      .catch(error => {
+        if (cancelled) return;
+        const missing = error.response?.status === 404;
+        setDetailsResult(previous =>
+          !missing && previous?.key === videoKey && previous.status === "ready"
+            ? previous
+            : { key: videoKey, status: missing ? "missing" : "failed", data: null }
+        );
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [platform, id, userId, authLoading]);
+  }, [platform, id, videoKey, userId, authLoading]);
+
+  // Another video's answer counts as still loading, so its details never show for this one.
+  const detailsStatus = detailsResult?.key === videoKey ? detailsResult.status : "loading";
+  const details = detailsStatus === "ready" ? detailsResult.data : null;
+  // Log in / Sign up from this page come back here afterwards.
+  const returnTo = location.pathname;
 
   // The card that linked here passes the video in the router state (playlists, likes, search). The current search's
   // list is the fallback, then placeholders, e.g. for a link opened in a new tab. Shown at once; the details replace
@@ -80,13 +95,12 @@ function Player() {
         : `https://img.youtube.com/vi/${id}/hqdefault.jpg`,
     channelTitle: "Unknown channel",
   };
-  const detailsVideo = details && isThisVideo(details.video) ? details.video : null;
+  const detailsVideo = details?.video ?? null;
   const video = detailsVideo || knownVideo || fallbackVideo;
   // Likes and saves post the whole object, and the JSON body limit is 16 kB. The row exists when the details do, so
   // the backend doesn't need the description to find it.
   const videoForActions = detailsVideo ? { ...detailsVideo, description: undefined } : video;
 
-  const videoKey = `${platform}:${id}`;
   const isLiked = likedVideoIds.has(videoKey);
   // Derived from AppContext's optimistic like (and its rollback) instead of a second copy of the state.
   const appStats = detailsVideo ? details.appStats : null;
@@ -171,15 +185,33 @@ function Player() {
             </svg>
             <span>{likeCount > 0 ? formatCount(likeCount) : "Like"}</span>
           </button>
-          <SaveToPlaylistButton video={videoForActions} label className={neutralPillClass} />
+          <SaveToPlaylistButton video={videoForActions} label className={neutralPillClass} returnTo={returnTo} />
         </div>
       </div>
 
       {showLoginPrompt && !user && (
-        <LoginPrompt message="Log in to like videos." className="mt-3 p-4 rounded-xl bg-white/5 border border-white/10" />
+        <LoginPrompt
+          message="Log in to like videos."
+          returnTo={returnTo}
+          className="mt-3 p-4 rounded-xl bg-white/5 border border-white/10"
+        />
       )}
 
-      {detailsVideo && <VideoDescription key={videoKey} video={detailsVideo} />}
+      {/* Keyed by video (and distinct from the comments' key, as siblings), so both start fresh for another video. */}
+      {detailsVideo && <VideoDescription key={`description:${videoKey}`} video={detailsVideo} />}
+
+      {/* Comments only exist for videos we have. A failed details request still shows them (they load on their own). */}
+      {detailsStatus === "missing" && (
+        <p className="mt-8 text-sm text-white/60">Comments aren&apos;t available for this video.</p>
+      )}
+      {(detailsStatus === "ready" || detailsStatus === "failed") && (
+        <CommentSection
+          key={`comments:${videoKey}`}
+          videoKey={videoKey}
+          initialCount={details?.appStats.comments ?? null}
+          returnTo={returnTo}
+        />
+      )}
     </div>
   );
 }

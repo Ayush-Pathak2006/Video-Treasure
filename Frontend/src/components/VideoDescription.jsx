@@ -1,5 +1,6 @@
-import React, { useLayoutEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { formatCount, formatTimeAgo } from "../utils/format";
+import { useClampedOverflow } from "../utils/useClampedOverflow";
 
 const PLATFORM_NAMES = { youtube: "YouTube", dailymotion: "Dailymotion" };
 
@@ -43,22 +44,8 @@ const buildStatsLine = ({ platform, views, likes, publishedAt }) => {
 function VideoDescription({ video }) {
   const textRef = useRef(null);
   const [expanded, setExpanded] = useState(false);
-  const [overflows, setOverflows] = useState(false);
   const description = (video.description || "").trim();
-
-  // While clamped, the text overflows when its full height is taller than the 3 lines shown. Measured again when
-  // the box changes width (rotation, resizing).
-  useLayoutEffect(() => {
-    const element = textRef.current;
-    if (!element || expanded) return undefined;
-
-    const measure = () => setOverflows(element.scrollHeight > element.clientHeight + 1);
-    measure();
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [description, expanded]);
+  const showToggle = useClampedOverflow(textRef, description, expanded);
 
   return (
     <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 text-sm">
@@ -69,7 +56,7 @@ function VideoDescription({ video }) {
           <p ref={textRef} className={`mt-2 text-white/90 whitespace-pre-line break-words ${expanded ? "" : "line-clamp-3"}`}>
             {renderWithLinks(description)}
           </p>
-          {(overflows || expanded) && (
+          {showToggle && (
             <button
               type="button"
               onClick={() => setExpanded(current => !current)}

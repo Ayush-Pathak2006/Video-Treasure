@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AppContext";
 import ppi, { API_BASE_URL } from "../api/axios";
+import { takeReturnTo } from "../utils/afterLogin";
 
 function Login() {
   const navigate = useNavigate();
@@ -25,7 +26,8 @@ function Login() {
 
     try {
       await login(data.email, data.password);
-      navigate("/");
+      // Back to the video the visitor logged in from, if any.
+      navigate(takeReturnTo() || "/");
     } catch (err) {
       const message =
         err.response?.data?.message ||
