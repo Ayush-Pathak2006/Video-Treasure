@@ -1,6 +1,8 @@
 import axios from "axios";
 import { getNextResetTime, markBucketSpent, reserveQuota } from "../utils/quotaTracker.js";
 import { getStubResponse } from "./youtube.stub.js";
+// search.list returns HTML-escaped text ("Tom &amp; Jerry").
+import { decodeHtmlEntities } from "../utils/htmlText.js";
 
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
@@ -42,10 +44,6 @@ const callYouTube = async (method, params, bucket) => {
     throw error;
   }
 };
-
-// search.list returns HTML-escaped text ("Tom &amp; Jerry").
-const HTML_ENTITIES = { amp: "&", quot: '"', "#39": "'", lt: "<", gt: ">" };
-const decodeHtmlEntities = text => (text || "").replace(/&(amp|quot|#39|lt|gt);/g, (_, entity) => HTML_ENTITIES[entity]);
 
 // ISO 8601 duration ("PT4M13S") to seconds; null for anything else.
 const parseDurationSeconds = isoDuration => {

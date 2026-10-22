@@ -11,12 +11,20 @@ const pillClass = "inline-flex items-center gap-2 rounded-full px-4 py-2 font-se
 const neutralPillClass = `${pillClass} bg-white/10 hover:bg-white/20 border-white/20`;
 const likedPillClass = `${pillClass} bg-pink-600 hover:bg-pink-700 border-pink-500`;
 
+// Frontend/.env.development and .env.production. Dailymotion only plays embeds through a Player ID now: its old
+// /embed/video/ URL redirects to the ID-less player, which answers 403 "Forbidden". Autostart is a setting of the
+// player in Dailymotion Studio, not a URL parameter.
+const DAILYMOTION_PLAYER_ID = import.meta.env.VITE_DAILYMOTION_PLAYER_ID;
+
+// null when the video can't be embedded here (Dailymotion without a Player ID).
 const buildEmbedUrl = (platform, id) => {
+  const videoId = encodeURIComponent(id);
+
   if (platform === "dailymotion") {
-    return `https://www.dailymotion.com/embed/video/${id}?autoplay=1`;
+    return DAILYMOTION_PLAYER_ID ? `https://geo.dailymotion.com/player/${DAILYMOTION_PLAYER_ID}.html?video=${videoId}` : null;
   }
 
-  return `https://www.youtube.com/embed/${id}?autoplay=1`;
+  return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
 };
 
 // The first letter (not half of an emoji) for the channel's avatar.
@@ -102,15 +110,31 @@ function Player() {
           on a narrow phone wouldn't reach. The explicit width keeps the minimum height from widening the player
           past the screen, and 202 px leaves 200 inside the 1 px border. */}
       <div className="w-full aspect-video min-h-[202px] rounded-xl overflow-hidden shadow-2xl shadow-purple-500/20 border border-white/10">
-        <iframe
-          width="100%"
-          height="100%"
-          src={embedUrl}
-          title={title}
-          frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        ></iframe>
+        {embedUrl ? (
+          // Both platforms check the Referer to see which site embeds them, so it must not be stripped.
+          <iframe
+            width="100%"
+            height="100%"
+            src={embedUrl}
+            title={title}
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+          ></iframe>
+        ) : (
+          <a
+            href={`https://www.dailymotion.com/video/${encodeURIComponent(id)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="relative flex h-full w-full items-center justify-center bg-black"
+          >
+            <img src={video.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
+            <span className="relative rounded-full bg-white/10 border border-white/20 px-5 py-2 font-semibold hover:bg-white/20 transition">
+              Watch on Dailymotion ↗
+            </span>
+          </a>
+        )}
       </div>
 
       <h1 className="mt-4 text-xl sm:text-2xl font-bold break-words">{video.title}</h1>

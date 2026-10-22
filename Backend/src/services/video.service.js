@@ -2,8 +2,15 @@ import { Video } from "../models/video.model.js";
 import { Like } from "../models/like.model.js";
 import { SUPPORTED_PLATFORMS } from "../providers/provider.registry.js";
 import { ApiError } from "../utils/ApiError.js";
+import { htmlToPlainText } from "../utils/htmlText.js";
 
 const DETAIL_FIELDS = "platform platformVideoId title description thumbnail channelTitle publishedAt views likes fetchedAt";
+
+// Dailymotion's descriptions are HTML: line breaks arrive as <br /> tags. Rows keep them as received (Dailymotion
+// rows are never refreshed, so a conversion on the way in would miss everything cached before it), and they
+// become plain text here, the one place descriptions are served.
+const toPlainDescription = ({ platform, description }) =>
+  platform === "dailymotion" ? htmlToPlainText(description) : description;
 
 /**
  * The Player's details for one platform video. `video` holds the platform's numbers (views, likes on YouTube);
@@ -31,7 +38,7 @@ export const loadVideoDetails = async ({ platform, platformVideoId, viewerId = n
   ]);
 
   return {
-    video,
+    video: { ...video, description: toPlainDescription(video) },
     appStats: {
       likes: likeStats?.likes ?? 0,
       likedByMe: Boolean(viewerId && likeStats?.likedByMe),

@@ -3,8 +3,9 @@ import { formatCount, formatTimeAgo } from "../utils/format";
 
 const PLATFORM_NAMES = { youtube: "YouTube", dailymotion: "Dailymotion" };
 
-// A link ends before trailing punctuation: "see https://example.com." links "https://example.com".
-const URL_PATTERN = /(https?:\/\/[^\s]*[^\s.,;:!?'")\]}>])/;
+// A link ends before trailing punctuation: "see https://example.com." links "https://example.com". A raw <, > or "
+// can't be part of a URL (they'd be percent-encoded), so a link stops there too.
+const URL_PATTERN = /(https?:\/\/[^\s<>"]*[^\s<>".,;:!?')\]}])/;
 
 // Descriptions are written by strangers, so they are rendered as React text with only their links turned into
 // anchors. Never as HTML. split() with a capturing group puts the URLs at the odd indexes.
