@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Env files stay on this machine. Vercel reads the same variables from its project settings
+# (Settings > Environment Variables).
+.env.development
+.env.production
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
