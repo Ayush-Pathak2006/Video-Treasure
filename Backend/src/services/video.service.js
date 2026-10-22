@@ -3,6 +3,7 @@ import { Like } from "../models/like.model.js";
 import { SUPPORTED_PLATFORMS } from "../providers/provider.registry.js";
 import { ApiError } from "../utils/ApiError.js";
 import { htmlToPlainText } from "../utils/htmlText.js";
+import { countVideoComments } from "./comment.service.js";
 
 const DETAIL_FIELDS = "platform platformVideoId title description thumbnail channelTitle publishedAt views likes fetchedAt";
 
@@ -31,10 +32,13 @@ export const loadVideoDetails = async ({ platform, platformVideoId, viewerId = n
   const { _id, ...video } = freshest;
 
   // A user may have liked two rows of the same video, so the likes are counted by distinct user.
-  const [likeStats] = await Like.aggregate([
-    { $match: { video: { $in: rows.map(row => row._id) } } },
-    { $group: { _id: "$likedBy" } },
-    { $group: { _id: null, likes: { $sum: 1 }, likedByMe: { $max: { $eq: ["$_id", viewerId] } } } },
+  const [[likeStats], comments] = await Promise.all([
+    Like.aggregate([
+      { $match: { video: { $in: rows.map(row => row._id) } } },
+      { $group: { _id: "$likedBy" } },
+      { $group: { _id: null, likes: { $sum: 1 }, likedByMe: { $max: { $eq: ["$_id", viewerId] } } } },
+    ]),
+    countVideoComments(platform, platformVideoId),
   ]);
 
   return {
@@ -42,8 +46,7 @@ export const loadVideoDetails = async ({ platform, platformVideoId, viewerId = n
     appStats: {
       likes: likeStats?.likes ?? 0,
       likedByMe: Boolean(viewerId && likeStats?.likedByMe),
-      // Comments aren't built yet.
-      comments: 0,
+      comments,
     },
   };
 };

@@ -4,8 +4,9 @@ import { getNextResetTime, getQuotaDay } from "./quotaTracker.js";
 
 const MINUTE_MS = 60 * 1000;
 
-// Starting limits per visitor. Tune them after watching real traffic. Only real YouTube API calls take a
-// token: cache hits, scrolling through cached videos and Dailymotion are free.
+// Starting limits per visitor. Tune them after watching real traffic. For searches, only real YouTube API calls
+// take a token: cache hits, scrolling through cached videos and Dailymotion are free. "comment" is the spam limit on
+// posting comments and replies (logged-in users only).
 // capacity: tokens when full. refillMs: one token comes back after this long. dailyMax: tokens per day, or null.
 export const SPEND_LIMITS = {
   anonymous: {
@@ -15,6 +16,7 @@ export const SPEND_LIMITS = {
   user: {
     newSearch: { capacity: 10, refillMs: 6 * MINUTE_MS, dailyMax: 25 },
     scrollRefill: { capacity: 6, refillMs: 10 * MINUTE_MS, dailyMax: null },
+    comment: { capacity: 5, refillMs: 30 * 1000, dailyMax: 200 },
   },
 };
 
@@ -94,7 +96,8 @@ export const takeSpendToken = async ({ identity, meter, viewer }) => {
   return { ok: false, retryAt: new Date(Date.now() + MINUTE_MS) };
 };
 
-// Gives the token back when the daily quota was used up, so the call brought the visitor nothing.
+// Gives the token back when the spend brought the visitor nothing: YouTube's daily quota was used up, or a comment
+// couldn't be posted after all.
 export const refundSpendToken = async ({ identity, meter }) => {
   await SpendMeter.updateOne({ identity, meter, usedToday: { $gt: 0 } }, { $inc: { tokens: 1, usedToday: -1 } });
 };

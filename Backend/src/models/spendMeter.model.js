@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const IDLE_METER_TTL_SECONDS = 2 * 24 * 60 * 60;
 
-// A visitor's token bucket for real YouTube API calls (see utils/spendMeter.js).
+// A visitor's token bucket for real YouTube API calls, or a user's for posting comments (see utils/spendMeter.js).
 const spendMeterSchema = new mongoose.Schema(
   {
     // "user:<id>" when the request has a valid access token, "ip:<address>" otherwise.
@@ -10,10 +10,10 @@ const spendMeterSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    // "newSearch": a request without a cursor. "scrollRefill": a request with one.
+    // "newSearch": a search without a cursor. "scrollRefill": a search with one. "comment": posting a comment.
     meter: {
       type: String,
-      enum: ["newSearch", "scrollRefill"],
+      enum: ["newSearch", "scrollRefill", "comment"],
       required: true,
     },
     tokens: {

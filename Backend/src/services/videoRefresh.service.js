@@ -2,6 +2,7 @@ import { Video } from "../models/video.model.js";
 import { Like } from "../models/like.model.js";
 import { getYouTubeVideoDetails } from "../providers/youtube.provider.js";
 import { removePlaylistItemsForVideos } from "./playlist.service.js";
+import { removeCommentsForVideos } from "./comment.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -26,9 +27,9 @@ const findStaleVideoIds = async now => {
 };
 
 /**
- * Deletes every row of these videos and everything that points to them (likes, playlist items). Used when a
- * video is gone from YouTube or can no longer be embedded. Likes go first, so a crash halfway can't leave them
- * pointing at deleted videos.
+ * Deletes every row of these videos and everything that points to them (likes, playlist items, comments and their
+ * likes). Used when a video is gone from YouTube or can no longer be embedded. The rows go last, so a crash halfway
+ * can't leave anything pointing at deleted videos.
  */
 export const removeVideos = async (platform, platformVideoIds) => {
   if (!platformVideoIds.length) return 0;
@@ -38,6 +39,7 @@ export const removeVideos = async (platform, platformVideoIds) => {
 
   await Like.deleteMany({ video: { $in: rowIds } });
   await removePlaylistItemsForVideos(rowIds);
+  await removeCommentsForVideos(platform, platformVideoIds);
   const { deletedCount } = await Video.deleteMany({ _id: { $in: rowIds } });
   return deletedCount;
 };
