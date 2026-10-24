@@ -51,8 +51,9 @@ export const rankVideos = videos => {
 // Title words that mark a copy of or a reaction to a work instead of the work itself. Each inner list is one
 // group of variants, and a group is skipped when the search contains one of its words, so "shape of you cover"
 // still gets covers. Words common in ordinary titles ("explained", "tutorial", "react") are left out on purpose:
-// they would push down real results for searches like "react hooks tutorial".
-const DERIVATIVE_TERMS = [
+// they would push down real results for searches like "react hooks tutorial". Recommendations (relatedVideos.service.js)
+// leave these words out of their title matching too.
+export const DERIVATIVE_TERMS = [
   ["cover", "covers", "covered"],
   ["reaction", "reacts", "reacting", "reacted"],
   ["karaoke"],
@@ -74,7 +75,7 @@ const DERIVATIVE_TERMS = [
 ];
 
 // Weaker signals of side content: often fine, but rarely the thing a bare search for a song or a movie means.
-const SIDE_CONTENT_TERMS = [
+export const SIDE_CONTENT_TERMS = [
   ["lyrics", "lyric", "lyrical"],
   ["review", "reviews"],
   ["choreography"],

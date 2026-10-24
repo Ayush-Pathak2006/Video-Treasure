@@ -1,11 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import LoginPrompt from "../LoginPrompt";
 import CommentComposer from "./CommentComposer";
-import { formatCount, formatTimeAgo } from "../../utils/format";
+import { formatCount, formatTimeAgo, getInitial } from "../../utils/format";
 import { useClampedOverflow } from "../../utils/useClampedOverflow";
-
-// The first letter (not half of an emoji) for the avatar.
-const getInitial = name => (Array.from((name || "").trim())[0] || "?").toUpperCase();
 
 const repliesLabel = count => `${count.toLocaleString("en")} ${count === 1 ? "reply" : "replies"}`;
 

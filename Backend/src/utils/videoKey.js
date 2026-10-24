@@ -30,3 +30,10 @@ export const validateVideoIdentity = ({ platform, platformVideoId }) => {
 
   return { platform, platformVideoId };
 };
+
+// A video key from a request: 400 unless it is one string (a repeated query parameter arrives as an array) holding
+// a well-formed key of a supported platform.
+export const readVideoKey = value => {
+  if (typeof value !== "string") throw new ApiError(400, "Invalid video key");
+  return validateVideoIdentity(parseVideoKey(value));
+};

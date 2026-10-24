@@ -3,6 +3,7 @@ import { Like } from "../models/like.model.js";
 import { getYouTubeVideoDetails } from "../providers/youtube.provider.js";
 import { removePlaylistItemsForVideos } from "./playlist.service.js";
 import { removeCommentsForVideos } from "./comment.service.js";
+import { removeHistoryForVideos } from "./watchHistory.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -28,8 +29,8 @@ const findStaleVideoIds = async now => {
 
 /**
  * Deletes every row of these videos and everything that points to them (likes, playlist items, comments and their
- * likes). Used when a video is gone from YouTube or can no longer be embedded. The rows go last, so a crash halfway
- * can't leave anything pointing at deleted videos.
+ * likes, watch history). Used when a video is gone from YouTube or can no longer be embedded. The rows go last, so a
+ * crash halfway can't leave anything pointing at deleted videos.
  */
 export const removeVideos = async (platform, platformVideoIds) => {
   if (!platformVideoIds.length) return 0;
@@ -40,11 +41,12 @@ export const removeVideos = async (platform, platformVideoIds) => {
   await Like.deleteMany({ video: { $in: rowIds } });
   await removePlaylistItemsForVideos(rowIds);
   await removeCommentsForVideos(platform, platformVideoIds);
+  await removeHistoryForVideos(platform, platformVideoIds);
   const { deletedCount } = await Video.deleteMany({ _id: { $in: rowIds } });
   return deletedCount;
 };
 
-// Only the fields videos.list returned: a missing snippet must not blank the stored title.
+// Only the fields videos.list returned: a missing snippet must not blank the stored title, channel id or tags.
 const toRefreshedFields = (details, now) =>
   Object.fromEntries(
     Object.entries({
@@ -52,8 +54,11 @@ const toRefreshedFields = (details, now) =>
       description: details.description,
       thumbnail: details.thumbnail,
       channelTitle: details.channelTitle,
+      channelId: details.channelId,
       views: details.views,
       likes: details.likes,
+      durationSeconds: details.durationSeconds,
+      tags: details.tags,
       fetchedAt: now,
     }).filter(([, value]) => value !== undefined)
   );

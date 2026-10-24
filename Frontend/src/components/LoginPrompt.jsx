@@ -1,10 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { rememberReturnTo } from "../utils/afterLogin";
-
-const buttonClass = "inline-flex items-center justify-center rounded-full font-semibold text-white transition-colors";
-const primaryButtonClass = `${buttonClass} bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500`;
-const secondaryButtonClass = `${buttonClass} bg-white/10 border border-white/20 hover:bg-white/20`;
+import { primaryButtonClass, secondaryButtonClass } from "./buttonStyles";
 
 /**
  * What anonymous visitors see in place of an action that needs an account: a message, then Log in and Sign up.

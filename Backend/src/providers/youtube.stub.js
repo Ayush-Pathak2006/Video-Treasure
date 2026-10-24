@@ -44,17 +44,18 @@ const buildSearchList = ({ q = "", pageToken, maxResults = 12 }) => {
     const position = (page - 1) * pageSize + index + 1;
     const videoId = toStubVideoId(`${q}|${position}`);
     const thumbnail = buildThumbnail(videoId, `STUB #${position}`);
+    const channel = (position % 5) + 1;
 
     return {
       kind: "youtube#searchResult",
       id: { kind: "youtube#video", videoId },
       snippet: {
         publishedAt: new Date(Date.UTC(2020, 0, 1) + (hash(videoId) % 2000) * 24 * 60 * 60 * 1000).toISOString(),
-        channelId: `stub-channel-${position % 5}`,
+        channelId: `stub-channel-${channel}`,
         title: escapeHtml(`"${q}" stub result #${position}`),
         description: escapeHtml(`Stub video for "${q}". YOUTUBE_MODE=stub, no YouTube quota was used.`),
         thumbnails: { default: { url: thumbnail }, high: { url: thumbnail } },
-        channelTitle: `Stub Channel ${(position % 5) + 1}`,
+        channelTitle: `Stub Channel ${channel}`,
       },
     };
   });
@@ -73,14 +74,18 @@ const STUB_CHART_SIZE = 20;
 const buildChartIds = ({ regionCode = "", videoCategoryId = "all" }) =>
   Array.from({ length: STUB_CHART_SIZE }, (_, index) => toStubVideoId(`chart|${regionCode}|${videoCategoryId}|${index}`));
 
+// The channels match search results': "Stub Channel 2" is stub-channel-2 everywhere.
 const buildChartSnippet = (videoId, index, { regionCode = "", videoCategoryId = "all" }) => {
   const thumbnail = buildThumbnail(videoId, `TREND #${index + 1}`);
+  const channel = (index % 5) + 1;
   return {
     publishedAt: new Date(Date.UTC(2026, 0, 1) + (hash(videoId) % 200) * 24 * 60 * 60 * 1000).toISOString(),
+    channelId: `stub-channel-${channel}`,
     title: `Trending stub #${index + 1} (${regionCode} ${videoCategoryId})`,
     description: "Stub chart video. YOUTUBE_MODE=stub, no YouTube quota was used.",
     thumbnails: { default: { url: thumbnail }, high: { url: thumbnail } },
-    channelTitle: `Stub Channel ${(index % 5) + 1}`,
+    channelTitle: `Stub Channel ${channel}`,
+    tags: ["stub", "trending", `category ${videoCategoryId}`],
   };
 };
 
@@ -95,8 +100,8 @@ const buildStubDescription = videoId =>
     "Descriptions longer than three lines are clamped until you press ...more.",
   ].join("\n");
 
-// By id, a snippet holds only the description. Without a title, thumbnail or channel, toVideoFromDetails leaves
-// them undefined and the refresh job keeps the stored ones.
+// By id, a snippet holds only the description. Without a title, thumbnail, channel or tags, toVideoFromDetails
+// leaves them undefined and the refresh job keeps the stored ones.
 const buildIdSnippet = (videoId, params) =>
   String(params.part || "").split(",").includes("snippet") ? { snippet: { description: buildStubDescription(videoId) } } : {};
 

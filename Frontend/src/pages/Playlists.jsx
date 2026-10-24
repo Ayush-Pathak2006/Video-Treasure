@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import Header from "../components/Header";
 import ppi from "../api/axios";
 
 const PlaylistCard = ({ playlist }) => (
@@ -62,8 +61,7 @@ function Playlists() {
   };
 
   return (
-    <div className="min-h-screen font-sans p-4 pt-24 sm:p-8 sm:pt-28">
-      <Header />
+    <div className="min-h-screen font-sans p-4 sm:p-8">
       <main>
         <h1 className="text-3xl font-bold mb-8">My Playlists</h1>
 

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { normalizeTags } from "../utils/videoTags.js";
 
 const DAILYMOTION_SEARCH_API = "https://api.dailymotion.com/videos";
 const DAILYMOTION_TOKEN_API = "https://api.dailymotion.com/oauth/token";
@@ -36,9 +37,9 @@ const getDailymotionToken = async () => {
   return cachedToken;
 };
 
-// "channel" would be the category ("music", "news"); the uploader is owner.screenname.
+// "channel" would be the category ("music", "news"); the uploader is owner.screenname, and owner.id its stable id.
 const VIDEO_FIELDS =
-  "id,title,description,thumbnail_url,created_time,owner.screenname,owner.verified,duration,views_total,likes_total";
+  "id,title,description,thumbnail_url,created_time,owner.id,owner.screenname,owner.verified,duration,views_total,likes_total,tags";
 
 const getVideos = async params => {
   const token = await getDailymotionToken();
@@ -47,20 +48,27 @@ const getVideos = async params => {
   return response.data;
 };
 
-const toVideo = (item, query) => ({
-  platform: "dailymotion",
-  platformVideoId: item.id,
-  query,
-  title: item.title,
-  description: item.description,
-  thumbnail: item.thumbnail_url,
-  channelTitle: item["owner.screenname"] || "Dailymotion",
-  publishedAt: new Date(item.created_time * 1000),
-  views: Number(item.views_total) || 0,
-  likes: Number(item.likes_total) || 0,
-  // Read by rankByRelevance; not stored.
-  rankingHints: { durationSeconds: Number(item.duration) || null, verified: Boolean(item["owner.verified"]) },
-});
+const toVideo = (item, query) => {
+  const durationSeconds = Number(item.duration) || null;
+
+  return {
+    platform: "dailymotion",
+    platformVideoId: item.id,
+    query,
+    title: item.title,
+    description: item.description,
+    thumbnail: item.thumbnail_url,
+    channelTitle: item["owner.screenname"] || "Dailymotion",
+    channelId: item["owner.id"],
+    publishedAt: new Date(item.created_time * 1000),
+    views: Number(item.views_total) || 0,
+    likes: Number(item.likes_total) || 0,
+    durationSeconds,
+    tags: normalizeTags(item.tags),
+    // Read by rankByRelevance; not stored.
+    rankingHints: { durationSeconds, verified: Boolean(item["owner.verified"]) },
+  };
+};
 
 // `publishedAfter` (a Date) returns only newer videos (created_after, in Unix seconds). `consumer` and
 // `regionCode` are YouTube options: Dailymotion has no quota, and a country filter would shrink search results.

@@ -3,6 +3,7 @@ import { getNextResetTime, markBucketSpent, reserveQuota } from "../utils/quotaT
 import { getStubResponse } from "./youtube.stub.js";
 // search.list returns HTML-escaped text ("Tom &amp; Jerry").
 import { decodeHtmlEntities } from "../utils/htmlText.js";
+import { normalizeTags } from "../utils/videoTags.js";
 
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
@@ -74,6 +75,10 @@ const toStats = item => ({
   durationSeconds: parseDurationSeconds(item.contentDetails?.duration),
 });
 
+// YouTube leaves `tags` out when a video has none. A snippet without a title isn't a whole one (the stub's answer
+// by id holds only a description), so there a missing list means "unknown" and the stored tags stay.
+const readTags = snippet => (snippet?.title === undefined ? undefined : normalizeTags(snippet.tags ?? []));
+
 // A videos.list item in the Video shape. Unlike search.list, videos.list doesn't HTML-escape its text. Fields
 // missing from the item (no snippet part) stay undefined.
 const toVideoFromDetails = item => {
@@ -86,18 +91,21 @@ const toVideoFromDetails = item => {
     description: item.snippet?.description,
     thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url,
     channelTitle: item.snippet?.channelTitle,
+    channelId: item.snippet?.channelId,
     publishedAt: item.snippet?.publishedAt,
     views,
     likes,
+    durationSeconds,
+    tags: readTags(item.snippet),
     // Read by rankByRelevance; not stored.
     rankingHints: { durationSeconds },
   };
 };
 
-// Views, likes and duration feed the ranking, and the full description replaces search.list's ~160-character
-// snippet. Asking for the snippet part costs nothing extra: videos.list is 1 general unit whatever `part` is. The
-// search call is already paid for by now, so if this call is denied or fails, the videos are still returned, with
-// the short description and 0 views.
+// Views, likes and duration feed the ranking, and the full description and the tags come with the snippet, which
+// search.list doesn't have (its description is a ~160-character excerpt). Asking for the snippet part costs nothing
+// extra: videos.list is 1 general unit whatever `part` is. The search call is already paid for by now, so if this
+// call is denied or fails, the videos are still returned, with the short description, 0 views and no tags.
 const getDetailsMap = async (videoIds, consumer) => {
   if (!videoIds.length) {
     return new Map();
@@ -105,7 +113,9 @@ const getDetailsMap = async (videoIds, consumer) => {
 
   try {
     const items = await listVideos({ part: "snippet,statistics,contentDetails", id: videoIds.join(",") }, consumer);
-    return new Map(items.map(item => [item.id, { ...toStats(item), description: item.snippet?.description }]));
+    return new Map(
+      items.map(item => [item.id, { ...toStats(item), description: item.snippet?.description, tags: readTags(item.snippet) }])
+    );
   } catch (error) {
     console.log(`⚠️ [youtube] details call failed, keeping the results without stats: ${error.message}`);
     return new Map();
@@ -141,7 +151,7 @@ export const getYouTubeChart = async ({ regionCode, videoCategoryId = null, cons
 
 /**
  * One search.list call (one of the day's search calls, charged to `consumer`) plus one videos.list call for
- * the stats and full descriptions (1 general unit). Throws the daily_limit error when the ledger denies the search call or YouTube
+ * the stats, full descriptions and tags (1 general unit). Throws the daily_limit error when the ledger denies the search call or YouTube
  * says the quota is used up. `publishedAfter` (a Date) returns only newer videos; `regionCode` ("IN") only
  * videos viewable in that country.
  */
@@ -185,9 +195,12 @@ export const searchYouTube = async (query, pageToken = null, options = {}) => {
       description: details.description ?? decodeHtmlEntities(item.snippet.description),
       thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default?.url,
       channelTitle: decodeHtmlEntities(item.snippet.channelTitle),
+      channelId: item.snippet.channelId,
       publishedAt: item.snippet.publishedAt,
       views: details.views,
       likes: details.likes,
+      durationSeconds: details.durationSeconds,
+      tags: details.tags,
       // Read by rankByRelevance; not stored.
       rankingHints: { durationSeconds: details.durationSeconds },
     };

@@ -2,7 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { MAX_COMMENT_LENGTH } from "../models/comment.model.js";
-import { parseVideoKey, validateVideoIdentity } from "../utils/videoKey.js";
+import { readVideoKey } from "../utils/videoKey.js";
 import {
   addCommentLike,
   createComment,
@@ -17,11 +17,6 @@ const OBJECT_ID = /^[a-f\d]{24}$/i;
 const SORTS = ["top", "newest"];
 
 // Values that must be one string: a repeated query parameter arrives as an array.
-const readVideoKey = value => {
-  if (typeof value !== "string") throw new ApiError(400, "Invalid video key");
-  return validateVideoIdentity(parseVideoKey(value));
-};
-
 const readCommentId = value => {
   if (typeof value !== "string" || !OBJECT_ID.test(value)) throw new ApiError(400, "Invalid comment id");
   return value;

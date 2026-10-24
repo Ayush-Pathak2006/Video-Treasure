@@ -14,7 +14,8 @@ function Privacy() {
     <LegalPage title="Privacy Policy">
       <p>
         {SITE_NAME} is a video search site. One search box shows videos from YouTube and Dailymotion, and logged-in
-        users can like videos and keep private playlists. This policy explains what we store, why, and for how long.
+        users can like and comment on videos, keep private playlists and find the videos they watched again. This
+        policy explains what we store, why, and for how long.
         By using {SITE_NAME} you agree to this policy.
       </p>
 
@@ -47,10 +48,19 @@ function Privacy() {
           private: only you can see them.
         </li>
         <li>
+          <strong>Your watch history.</strong> The videos you watch while logged in, and when, so you can find them
+          again and get better suggestions. You can remove videos, clear it or pause it at any time on your History
+          page.
+        </li>
+        <li>
+          <strong>Your comments.</strong> The comments you post, with your name and the time, and the comments you
+          like. Comments are public; you can edit or delete yours at any time.
+        </li>
+        <li>
           <strong>Public video information.</strong> We keep a copy of public details of the videos shown on the site,
           such as titles, descriptions, thumbnails, channel names and view counts. YouTube information is refreshed
           regularly, as YouTube&apos;s policies require, and videos that are no longer available are removed together
-          with any likes or playlist entries for them.
+          with any likes, playlist entries, comments or watch history for them.
         </li>
         <li>
           <strong>Keeping the service fair.</strong> To protect the site from abuse, we use your account or, if you
@@ -95,7 +105,10 @@ function Privacy() {
 
       <h2>Your choices</h2>
       <ul>
-        <li>You can remove likes and delete playlists at any time.</li>
+        <li>
+          You can remove likes, delete playlists, edit or delete your comments, and remove, clear or pause your watch
+          history at any time.
+        </li>
         <li>
           To have your account and everything linked to it deleted, contact us (below). We delete it within 7 days.
         </li>

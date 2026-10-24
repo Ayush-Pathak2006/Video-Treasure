@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import Header from "../components/Header";
 import ppi from "../api/axios";
 
 const getVideoKey = video => `${video.platform}:${video.platformVideoId}`;
@@ -120,8 +119,7 @@ function PlaylistDetail() {
   };
 
   return (
-    <div className="min-h-screen font-sans p-4 pt-24 sm:p-8 sm:pt-28">
-      <Header />
+    <div className="min-h-screen font-sans p-4 sm:p-8">
       <main>
         <Link to="/playlists" className="text-sm text-purple-300 hover:text-white">
           ← My Playlists

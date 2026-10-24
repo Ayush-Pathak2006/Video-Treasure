@@ -7,6 +7,7 @@ import { SpendMeter } from "../models/spendMeter.model.js";
 import { CrawlerState } from "../models/crawlerState.model.js";
 import { Lease } from "../models/lease.model.js";
 import { CommentLike } from "../models/commentLike.model.js";
+import { WatchHistory } from "../models/watchHistory.model.js";
 
 // `runMigrations`: the startup migrations (index fixes, rank backfill) run in one process only: the worker, or the
 // API when it also runs the jobs (RUN_JOBS_IN_API). Extra API instances just connect.
@@ -22,9 +23,16 @@ const connectDB = async ({ runMigrations = true } = {}) => {
       await ensureSearchRanks();
     }
 
-    // The quota ledger, the spend meters, the job slots, the leases and the comment likes need their unique indexes
-    // for atomic updates, so build them before serving.
-    await Promise.all([QuotaUsage.init(), SpendMeter.init(), CrawlerState.init(), Lease.init(), CommentLike.init()]);
+    // The quota ledger, the spend meters, the job slots, the leases, the comment likes and the watch history need their
+    // unique indexes for atomic updates, so build them before serving.
+    await Promise.all([
+      QuotaUsage.init(),
+      SpendMeter.init(),
+      CrawlerState.init(),
+      Lease.init(),
+      CommentLike.init(),
+      WatchHistory.init(),
+    ]);
     console.log(`\n✅ MongoDB connected !! DB HOST: ${connectionInstance.connection.host}`);
   } catch (error) {
     console.log("MONGODB connection FAILED ", error);

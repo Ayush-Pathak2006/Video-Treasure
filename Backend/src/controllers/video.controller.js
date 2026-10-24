@@ -11,6 +11,7 @@ import { buildSpender } from "../utils/spendMeter.js";
 import { recordSearchEvent } from "../utils/searchLog.js";
 import { validateVideoIdentity } from "../utils/videoKey.js";
 import { loadVideoDetails } from "../services/video.service.js";
+import { getRelatedVideos as readRelatedVideos } from "../services/relatedVideos.service.js";
 
 const MIN_QUERY_LENGTH = 2;
 const MAX_QUERY_LENGTH = 100;
@@ -134,4 +135,15 @@ const getVideoDetails = asyncHandler(async (req, res) => {
   );
 });
 
-export { searchVideos, getTrendingVideos, getVideoDetails };
+// GET /videos/:platform/:platformVideoId/related, the Player's "Up next". Public and DB-only, like the details. A
+// logged-in viewer's watched videos move down, so the answer says who asked.
+const getRelatedVideos = asyncHandler(async (req, res) => {
+  const { platform, platformVideoId } = validateVideoIdentity(req.params);
+  const { videos } = await readRelatedVideos({ platform, platformVideoId, viewerId: req.user?._id ?? null });
+
+  return res.status(200).json(
+    new ApiResponse(200, { videos, viewer: req.user ? "user" : "anonymous" }, "Related videos fetched successfully")
+  );
+});
+
+export { searchVideos, getTrendingVideos, getVideoDetails, getRelatedVideos };

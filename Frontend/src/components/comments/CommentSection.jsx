@@ -4,13 +4,12 @@ import ppi, { requestAsViewer } from "../../api/axios";
 import LoginPrompt from "../LoginPrompt";
 import CommentComposer from "./CommentComposer";
 import CommentItem from "./CommentItem";
+import { getInitial } from "../../utils/format";
 
 const SORTS = [
   { value: "top", label: "Top" },
   { value: "newest", label: "Newest" },
 ];
-
-const getInitial = name => (Array.from((name || "").trim())[0] || "?").toUpperCase();
 
 const countLabel = count => `${count.toLocaleString("en")} ${count === 1 ? "comment" : "comments"}`;
 

@@ -7,6 +7,7 @@ import userRouter from './routes/user.routes.js';
 import likeRouter from './routes/like.routes.js'; 
 import playlistRouter from './routes/playlist.routes.js';
 import commentRouter from './routes/comment.routes.js';
+import watchHistoryRouter from './routes/watchHistory.routes.js';
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { floodLimiter } from "./middlewares/rateLimit.middleware.js";
 
@@ -73,6 +74,7 @@ app.use("/api/v1/users", userRouter);
 app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/playlists", playlistRouter);
 app.use("/api/v1/comments", commentRouter);
+app.use("/api/v1/history", watchHistoryRouter);
 app.use("/api/v1/auth", authRoutes);
 app.use(errorHandler);
 

@@ -2,7 +2,7 @@
 // privacy policy to say how users can reach the operator: CONTACT_EMAIL (empty shows a placeholder).
 export const SITE_NAME = "Video Treasure";
 export const CONTACT_EMAIL = "ayushpathak13022006@gmail.com";
-export const LEGAL_LAST_UPDATED = "22 October 2026";
+export const LEGAL_LAST_UPDATED = "23 October 2026";
 
 // The exact URLs YouTube's Developer Policies (III.A) ask for.
 export const YOUTUBE_TERMS_URL = "https://www.youtube.com/t/terms";

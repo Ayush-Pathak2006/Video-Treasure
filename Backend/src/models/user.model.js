@@ -64,6 +64,12 @@ const userSchema = new Schema(
     passwordResetExpiry: {
       type: Date,
     },
+
+    // Paused: the Player's watches aren't added to the watch history. Existing entries stay.
+    historyPaused: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

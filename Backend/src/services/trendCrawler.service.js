@@ -45,13 +45,17 @@ const saveSnapshot = async ({ platform, category, videos, now }) => {
       updateOne: {
         filter: { platform, platformVideoId: video.platformVideoId, query: key },
         update: {
+          // Mongoose drops the fields a provider left undefined.
           $set: {
             title: video.title,
             description: video.description,
             thumbnail: video.thumbnail,
             channelTitle: video.channelTitle,
+            channelId: video.channelId,
             views: video.views,
             likes: video.likes,
+            durationSeconds: video.durationSeconds,
+            tags: video.tags,
             fetchedAt: now,
           },
           $setOnInsert: { publishedAt: video.publishedAt },
