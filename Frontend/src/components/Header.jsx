@@ -177,12 +177,7 @@ function Header() {
           menus' backdrop root, and their blur would no longer reach the page under them (its text showed through). */}
       <div className="absolute inset-0 -z-10 border-b border-white/10 bg-gray-900/60 backdrop-blur-md" aria-hidden="true" />
       <div className="container mx-auto px-4 h-full flex items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2 h-11 shrink-0">
-          <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-md shadow-purple-500/30">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-0.5" viewBox="0 0 24 24" fill="white" aria-hidden="true">
-              <path d="M7 4.5v15l12.5-7.5z" stroke="white" strokeWidth={2} strokeLinejoin="round" />
-            </svg>
-          </span>
+        <Link to="/" className="flex items-center h-11 shrink-0">
           <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 text-transparent bg-clip-text">
             Video Treasure
           </span>
